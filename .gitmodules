@@ -1,0 +1,6 @@
+[submodule "vendor/open-ralph-wiggum"]
+	path = vendor/open-ralph-wiggum
+	url = https://github.com/Th0rgal/open-ralph-wiggum.git
+[submodule "vendor/ecc"]
+	path = vendor/ecc
+	url = https://github.com/affaan-m/ECC.git
