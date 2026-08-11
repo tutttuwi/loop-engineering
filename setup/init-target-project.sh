@@ -23,6 +23,8 @@
 #   ./setup/init-target-project.sh
 #   # レジストリから選択
 #   ./setup/init-target-project.sh --target-name app-a
+#   # レジストリ一覧
+#   ./setup/init-target-project.sh --list-targets
 #   # または明示指定(CLIが優先され、解決済み yaml も更新される)
 #   ./setup/init-target-project.sh --target /path/to/target-project
 #
@@ -42,11 +44,13 @@ mcp_permission_cli=""
 mcp_permission_overrides_cli=""
 target_config=""
 target_registry_name=""
+list_targets_only=0
 
 usage() {
   cat >&2 <<'EOF'
 Usage:
   init-target-project.sh [--target <path>] [options]
+  init-target-project.sh --list-targets
 
 対象パスの優先順位: --target > 解決済み target.yaml の target_path
 target-config の優先順位:
@@ -56,6 +60,7 @@ Options:
   --target <path>             対象プロジェクトパス(省略時は target.yaml の target_path)
   --target-config <path>      使用する target.yaml (既定: project-config/target.yaml)
   --target-name <name>        project-config/targets/<name>.yaml (--target-config と排他)
+  --list-targets              project-config/targets/*.yaml の名前を列挙して終了
   --lmstudio-base-url <url>   既定: http://127.0.0.1:1234/v1
   --lmstudio-model <id>       LM StudioのモデルID(省略時はサーバーから自動検出を試みる)
   --lmstudio-model-name <n>   モデル表示名
@@ -90,6 +95,7 @@ while [[ $# -gt 0 ]]; do
     --target) target="$2"; shift 2 ;;
     --target-config) target_config="$2"; shift 2 ;;
     --target-name) target_registry_name="$2"; shift 2 ;;
+    --list-targets) list_targets_only=1; shift ;;
     --lmstudio-base-url) base_url="$2"; shift 2 ;;
     --lmstudio-model) model_id="$2"; shift 2 ;;
     --lmstudio-model-name) model_name="$2"; shift 2 ;;
@@ -107,6 +113,11 @@ while [[ $# -gt 0 ]]; do
     *) log_error "不明な引数: $1"; usage; exit 1 ;;
   esac
 done
+
+if [[ "$list_targets_only" -eq 1 ]]; then
+  print_target_registry_list
+  exit 0
+fi
 
 # --- target.yaml から既定値を解決 ------------------------------------------
 target_yaml="$(resolve_target_config "$target_config" "$target_registry_name")" || exit 1

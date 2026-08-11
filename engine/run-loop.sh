@@ -11,7 +11,14 @@
 #   engine/run-loop.sh --loop yabaiyo     --target-name app-a
 #   engine/run-loop.sh --loop pr-review   --target /path/to/repo --extra "--model lmstudio/qwen3-coder-30b"
 #   engine/run-loop.sh --status                       # 実行中ループの状態確認
+#   engine/run-loop.sh --list-targets                 # レジストリ一覧
 #   engine/run-loop.sh --loop monkey-test --dry-run    # プロンプトを生成して表示するだけ
+#
+# 終了コード契約(ホスト):
+#   0  成功(dry-run 含む。Issue ゲート通過 / skip / require_issue=false)
+#   1  引数・設定・ゲート・ポスト処理などのホスト側失敗
+#   その他 Ralph (bun) の終了コードを伝播
+# 実行メタ: OUTPUT_DIR/run-meta.json (loop / started_at / exit_code 等)
 #
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,14 +33,16 @@ usage() {
 Usage:
   run-loop.sh --loop <name> [options]
   run-loop.sh --status [options]
+  run-loop.sh --list-targets
 
-必須(--status 以外):
+必須(--status / --list-targets 以外):
   --loop <name>            loops/<name>/ ディレクトリのループを実行する
 
 主なオプション:
   --target <path>          対象プロジェクトの絶対/相対パス(project-config/target.yamlのtarget_pathを上書き)
   --target-config <path>   使用するtarget.yamlのパス(既定: project-config/target.yaml)
   --target-name <name>     project-config/targets/<name>.yaml を使う(--target-config と排他)
+  --list-targets           project-config/targets/*.yaml の名前を列挙して終了
   --max-iterations <N>     最大イテレーション数(既定: loop.yamlの値)
   --min-iterations <N>     最小イテレーション数(既定: loop.yamlの値)
   --model <provider/model> 使用モデル(既定: opencode.jsonのデフォルトモデル = ローカルLLM)
@@ -48,6 +57,9 @@ Usage:
   --status                 対象プロジェクト上の Ralph 状態を表示する(--loop 不要)
   --extra "<args>"         ralph CLIにそのまま追加で渡す引数
   -h, --help               このヘルプを表示
+
+終了コード: 0=成功 / 1=ホスト側失敗 / その他=Ralph の終了コード
+実行メタ: <OUTPUT_DIR>/run-meta.json
 
 利用可能なループ一覧: $(ls "${ROOT_DIR}/loops" 2>/dev/null | grep -v '^_' | tr '\n' ' ')
 EOF
@@ -85,9 +97,23 @@ issue_fallback="none"
 skip_issue_gate=0
 dry_run=0
 status_only=0
+list_targets_only=0
 post_report=0
 post_report_always=0
 extra_args=""
+RUN_META_PATH=""
+RUN_META_STARTED_AT=""
+RUN_META_DRY_RUN="false"
+RUN_META_REQUIRE_ISSUE=""
+RUN_META_ISSUE_FALLBACK=""
+
+_run_meta_finalize() {
+  local ec="${1:-0}"
+  if [[ -n "${RUN_META_PATH:-}" ]]; then
+    write_run_meta_json "$RUN_META_PATH" "$ec" || true
+  fi
+}
+trap '_run_meta_finalize $?' EXIT
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -95,6 +121,7 @@ while [[ $# -gt 0 ]]; do
     --target) target_override="$2"; shift 2 ;;
     --target-config) target_config="$2"; shift 2 ;;
     --target-name) target_registry_name="$2"; shift 2 ;;
+    --list-targets) list_targets_only=1; shift ;;
     --max-iterations) max_iterations_override="$2"; shift 2 ;;
     --min-iterations) min_iterations_override="$2"; shift 2 ;;
     --model) model_override="$2"; shift 2 ;;
@@ -120,6 +147,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# --- --list-targets --------------------------------------------------------
+if [[ "$list_targets_only" -eq 1 ]]; then
+  print_target_registry_list
+  exit 0
+fi
+
 # --- --status --------------------------------------------------------------
 if [[ "$status_only" -eq 1 ]]; then
   require_cmd bun "https://bun.sh/ からインストールしてください"
@@ -139,7 +172,7 @@ if [[ "$status_only" -eq 1 ]]; then
 fi
 
 if [[ -z "$loop_name" ]]; then
-  log_error "--loop <name> は必須です(--status 以外)"
+  log_error "--loop <name> は必須です(--status / --list-targets 以外)"
   usage
   exit 1
 fi
@@ -150,6 +183,8 @@ if [[ ! -d "$loop_dir" ]]; then
   usage
   exit 1
 fi
+
+validate_loop_dir "$loop_dir" || exit 1
 
 loop_yaml="${loop_dir}/loop.yaml"
 prompt_template="${loop_dir}/$(yaml_get "$loop_yaml" "prompt_file" "prompt.md")"
@@ -184,6 +219,18 @@ stage_engine_lib_into_target "$target_path"
 runtime_root="${target_path}/.loop-engineering"
 output_dir="${runtime_root}/output/${loop_name}/${run_id}"
 mkdir -p "$output_dir"
+
+# 実行メタ(開始時点。終了時に trap で exit_code を確定)
+RUN_META_STARTED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S%z")"
+RUN_META_DRY_RUN="$([[ "$dry_run" -eq 1 ]] && echo true || echo false)"
+RUN_META_REQUIRE_ISSUE="$require_issue"
+RUN_META_ISSUE_FALLBACK="$issue_fallback"
+RUN_META_PATH="${output_dir}/run-meta.json"
+export LOOP_NAME="$loop_name"
+export TARGET_PATH="$target_path"
+export RUN_ID="$run_id"
+export OUTPUT_DIR="$output_dir"
+write_run_meta_json "$RUN_META_PATH" "" || true
 
 # 進捗ファイルのシード(初回 Read の File not found を減らす)
 ensure_seed_files "$output_dir" "$seed_files_csv" || exit 1

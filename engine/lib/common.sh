@@ -91,6 +91,197 @@ list_target_registry_names() {
   done
 }
 
+# レジストリ名を人間可読に一覧表示する(--list-targets 用。stdout)。
+# 戻り値: 0 件でも 0(発見 UX。欠如はメッセージで示す)。
+print_target_registry_list() {
+  local names name count=0
+  names="$(list_target_registry_names)"
+  echo "--- project-config/targets レジストリ ---"
+  if [[ -z "$names" ]]; then
+    echo "  (なし) project-config/targets/*.yaml を追加し --target-name <name> で選択"
+    echo "  例: cp project-config/target.yaml.example project-config/targets/app-a.yaml"
+    return 0
+  fi
+  while IFS= read -r name || [[ -n "${name:-}" ]]; do
+    [[ -z "$name" ]] && continue
+    echo "  - ${name}"
+    count=$((count + 1))
+  done <<< "$names"
+  echo "合計: ${count} 件 (--target-name <name> で選択)"
+}
+
+# 対象PJの .gitignore が .loop-engineering/ (または末尾スラッシュ無し) を含むか。
+# 含む: 0 / 含まない・ファイル無し: 1
+target_has_loop_engineering_gitignore() {
+  local target="$1"
+  local gi="${target}/.gitignore"
+  [[ -f "$gi" ]] || return 1
+  if grep -qxF ".loop-engineering/" "$gi" 2>/dev/null; then
+    return 0
+  fi
+  if grep -qxF ".loop-engineering" "$gi" 2>/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
+# .loop-engineering 配下が git に追跡されているか(対象が git リポのとき)。
+# 追跡あり: 0 / なし・非 git: 1
+target_loop_engineering_is_tracked() {
+  local target="$1"
+  [[ -d "$target" ]] || return 1
+  if ! git -C "$target" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    return 1
+  fi
+  # 追跡ファイルが1件でもあれば問題
+  if git -C "$target" ls-files -- ".loop-engineering" ".loop-engineering/*" 2>/dev/null | grep -q .; then
+    return 0
+  fi
+  return 1
+}
+
+# ステージ済み engine/lib と基盤の主要ファイルが一致するか。
+# 健全: 0 / 乖離または欠落: 1
+# 使い方: check_staged_engine_lib_health <target> [欠落一覧を書くファイル]
+check_staged_engine_lib_health() {
+  local target="$1"
+  local report_file="${2:-}"
+  local src_lib="${LOOP_ENGINEERING_ROOT}/engine/lib"
+  local dest_lib="${target}/.loop-engineering/engine/lib"
+  local f mismatched=0
+  local problems=""
+
+  if [[ ! -d "$dest_lib" ]]; then
+    [[ -n "$report_file" ]] && printf '%s\n' "missing-dir:${dest_lib}" >"$report_file"
+    return 1
+  fi
+  # stage_engine_lib_into_target が同期するファイルのみ検査
+  for f in common.sh report.sh video.sh tts.sh; do
+    if [[ ! -f "${src_lib}/${f}" ]]; then
+      continue
+    fi
+    if [[ ! -f "${dest_lib}/${f}" ]]; then
+      problems="${problems}missing:${f}"$'\n'
+      mismatched=1
+      continue
+    fi
+    if ! cmp -s "${src_lib}/${f}" "${dest_lib}/${f}" 2>/dev/null; then
+      problems="${problems}stale:${f}"$'\n'
+      mismatched=1
+    fi
+  done
+  if [[ -n "$report_file" ]]; then
+    printf '%s' "$problems" >"$report_file"
+  fi
+  return "$mismatched"
+}
+
+# loops/<name>/ の loop.yaml 必須キーと参照ファイル存在を検証する。
+# 壊れた yaml の黙デフォルトを早期検出する(P5-5)。
+# 使い方: validate_loop_dir <loop_dir>
+# 成功: 0 / 失敗: 1(理由を stderr)
+validate_loop_dir() {
+  local loop_dir="$1"
+  local loop_yaml="${loop_dir}/loop.yaml"
+  local key val prompt_file report_template missing=0
+
+  if [[ ! -d "$loop_dir" ]]; then
+    log_error "ループディレクトリがありません: ${loop_dir}"
+    return 1
+  fi
+  if [[ ! -f "$loop_yaml" ]]; then
+    log_error "loop.yaml がありません: ${loop_yaml}"
+    return 1
+  fi
+
+  for key in name agent max_iterations min_iterations completion_promise prompt_file report_template; do
+    val="$(yaml_get "$loop_yaml" "$key" "")"
+    if [[ -z "$val" ]]; then
+      log_error "loop.yaml に必須キー '${key}' がありません(または空です): ${loop_yaml}"
+      missing=1
+    fi
+  done
+  if [[ "$missing" -ne 0 ]]; then
+    return 1
+  fi
+
+  prompt_file="$(yaml_get "$loop_yaml" "prompt_file" "prompt.md")"
+  report_template="$(yaml_get "$loop_yaml" "report_template" "report-template.md")"
+  if [[ ! -f "${loop_dir}/${prompt_file}" ]]; then
+    log_error "prompt_file がありません: ${loop_dir}/${prompt_file}"
+    return 1
+  fi
+  if [[ ! -f "${loop_dir}/${report_template}" ]]; then
+    log_error "report_template がありません: ${loop_dir}/${report_template}"
+    return 1
+  fi
+
+  # require_issue がある場合は true|false 系のみ
+  val="$(yaml_get "$loop_yaml" "require_issue" "")"
+  if [[ -n "$val" ]]; then
+    val="$(printf '%s' "$val" | tr '[:upper:]' '[:lower:]')"
+    case "$val" in
+      true|false|1|0|yes|no|on|off) ;;
+      *)
+        log_error "require_issue は true|false 系です: ${val}"
+        return 1
+        ;;
+    esac
+  fi
+  return 0
+}
+
+# OUTPUT_DIR/run-meta.json を書き出す(P5-6)。
+# 使い方: write_run_meta_json <path> <exit_code>  ※他フィールドは環境変数/引数から
+# 必須環境: LOOP_NAME, TARGET_PATH, RUN_ID, OUTPUT_DIR
+# 任意: RUN_META_STARTED_AT, RUN_META_DRY_RUN, RUN_META_REQUIRE_ISSUE, RUN_META_ISSUE_FALLBACK
+write_run_meta_json() {
+  local path="$1"
+  local exit_code="${2:-}"
+  local started="${RUN_META_STARTED_AT:-}"
+  local finished
+  finished="$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S%z")"
+  if [[ -z "$started" ]]; then
+    started="$finished"
+  fi
+  mkdir -p "$(dirname "$path")"
+  python3 - "$path" \
+    "${LOOP_NAME:-}" \
+    "${TARGET_PATH:-}" \
+    "${RUN_ID:-}" \
+    "$started" \
+    "$finished" \
+    "$exit_code" \
+    "${RUN_META_DRY_RUN:-false}" \
+    "${RUN_META_REQUIRE_ISSUE:-}" \
+    "${RUN_META_ISSUE_FALLBACK:-}" \
+    "${OUTPUT_DIR:-}" <<'PY'
+import json, sys
+path, loop, target, run_id, started, finished, exit_code, dry_run, require_issue, issue_fallback, output_dir = sys.argv[1:12]
+meta = {
+    "loop": loop,
+    "target_path": target,
+    "run_id": run_id,
+    "output_dir": output_dir,
+    "started_at": started,
+    "finished_at": finished,
+    "dry_run": str(dry_run).lower() in ("1", "true", "yes"),
+    "require_issue": require_issue,
+    "issue_fallback": issue_fallback,
+}
+if exit_code != "":
+    try:
+        meta["exit_code"] = int(exit_code)
+    except ValueError:
+        meta["exit_code"] = exit_code
+else:
+    meta["exit_code"] = None
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(meta, f, ensure_ascii=False, indent=2)
+    f.write("\n")
+PY
+}
+
 # 対象プロジェクトの target.yaml を解決する。
 # 優先順位:
 #   1. explicit(--target-config)

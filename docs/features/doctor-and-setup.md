@@ -2,9 +2,9 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ステータス | `done`（P0-3 Target/Auth + P4-3 同梱ループ一覧 + P4-4 未 init smoke） |
+| ステータス | `done`（P0-3 Target/Auth + P4-3/P4-4 + P5-7 PORTING 整合 + P5-8 ステージ健全性） |
 | 関連実装 | `setup/doctor.sh`, `setup/install.sh` |
-| ロードマップ | P0-3 / P4-3 / P4-4 |
+| ロードマップ | P0-3 / P4-3 / P4-4 / P5-7 / P5-8 |
 
 ## 現状
 
@@ -14,16 +14,18 @@ doctor が見るもの（概略）:
 - submodule（ralph / ecc）の存在
 - 同梱ループ一覧（`loops/*/loop.yaml`、`_template` 除外 — sync `--all-loops` と同契約）
 - LM Studio 疎通（任意・WARN）
-- Target readiness（`target.yaml` / init / mcp permission）
+- Target readiness（`target.yaml` / init / mcp permission / lmstudio provider）
 - Auth / Issue readiness（token / gh / glab）
 - TTS / Marp（`say` 有無と既定エンジン、`LOOP_MARP_VERSION` ピン推奨）
+- PORTING 整合（`.gitignore` の `.loop-engineering/`、sync/init 痕跡）
+- ステージ健全性（未追跡・基盤との乖離）
 
-### 見ないもの（ギャップ）
+`--list-targets` でレジストリ一覧（診断せず終了）。
 
-- sync / init の実施痕跡の詳細監査
-- `.loop-engineering` ステージの健全性の深い検査
+### 意図的に見ないもの
 
-ドキュメントの PORTING チェックリストと doctor が一致していない。
+- ツール単位 MCP permission DSL
+- CI 上の実 Chromium / 実 TTS
 
 ## 要件定義（P0-3）
 
@@ -99,9 +101,21 @@ target 解決は `resolve_target_config` + `yaml_get` を再利用（`common.sh`
 | exit | ERROR≥1 なら非ゼロ（FR-DOC-2） |
 | 検証 | `./tests/smoke.sh` — 一時 target + `--target-config` で上記を固定 |
 
+## P5-7 / P5-8 doctor ↔ PORTING / ステージ
+
+| 検査 | レベル | メモ |
+| --- | --- | --- |
+| `.gitignore` に `.loop-engineering/` | WARN | PORTING チェックリスト |
+| `.opencode/loop-engineering/{skills,rules}` 欠如 | WARN | sync/init 痕跡が薄い |
+| `provider.lmstudio` 欠如 | WARN | PORTING: opencode.json に lmstudio |
+| `.loop-engineering` が git 追跡 | WARN | P5-8 |
+| ステージ済み `engine/lib` と基盤の乖離 | WARN | `check_staged_engine_lib_health` |
+| ステージ未実施 | WARN | 初回 run-loop / init で同期 |
+
 ## 受け入れ条件
 
 - [x] 未 init の target で doctor が ERROR を出し非ゼロ終了する（P4-4 / smoke）
-- [ ] PORTING チェックリストの主要項目が doctor でカバーされる
-- [ ] install.sh 経由でも新チェックが走る（または明示的に doctor 推奨）
+- [x] PORTING チェックリストの主要項目が doctor でカバーされる（P5-7）
+- [x] install.sh 経由でも新チェックが走る（doctor 委譲）
 - [x] doctor が同梱ループを列挙し `_template` を除外する（P4-3 / smoke）
+- [x] gitignore / 追跡 / ステージ乖離の WARN（P5-8 / smoke）

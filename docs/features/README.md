@@ -17,22 +17,22 @@
 
 | 文書 | ステータス | 概要 |
 | --- | --- | --- |
-| [roadmap.md](./roadmap.md) | — | P0–P4 完了（薄い運用ギャップまで） |
-| [workspace-boundary.md](./workspace-boundary.md) | `done` | 対象PJ cwd・`.loop-engineering` ステージング |
-| [loop-runner.md](./loop-runner.md) | `done` | `run-loop`・Ralph・promise・dry-run・`--status` |
-| [target-config.md](./target-config.md) | `done` | `target.yaml`・`--target-name` レジストリ（P1-2 / P2-4） |
+| [roadmap.md](./roadmap.md) | — | P0–P5 完了。据え置きは roadmap の「据え置き」参照 |
+| [workspace-boundary.md](./workspace-boundary.md) | `done` | 対象PJ cwd・`.loop-engineering` ステージング・健全性（P5-8） |
+| [loop-runner.md](./loop-runner.md) | `done` | `run-loop`・Ralph・promise・dry-run・`--status`・`run-meta.json`（P5-6） |
+| [target-config.md](./target-config.md) | `done` | `target.yaml`・`--target-name` / `--list-targets`（P2-4 / P5-2） |
 | [opencode-init.md](./opencode-init.md) | `done` | init / configure・生成される設定（tmpl は参考のみ） |
 | [ecc-sync.md](./ecc-sync.md) | `done` | ECC抽出・カスタム保護・マルチループ和集合 |
-| [issue-posting.md](./issue-posting.md) | `done` | Issue create/update・完了ゲート・CLI代替 |
+| [issue-posting.md](./issue-posting.md) | `done` | Issue create/update・完了ゲート・CLI代替（P5-3 smoke） |
 | [permissions-unattended.md](./permissions-unattended.md) | `done` | ヘッドレス向け permission（一括 + サーバ別） |
-| [report-video-pipeline.md](./report-video-pipeline.md) | `done` | Marp / `--post-report` smoke 固定（P3-3）。実 TTS/フル動画は運用依存 |
-| [doctor-and-setup.md](./doctor-and-setup.md) | `done` | doctor 強化・接続完了診断・TTS/Marp・同梱ループ一覧（P4-3）・未 init smoke（P4-4） |
-| [porting-and-update.md](./porting-and-update.md) | `done` | 移植・`update.sh` ワンショット更新 |
+| [report-video-pipeline.md](./report-video-pipeline.md) | `done` | Marp / `--post-report` smoke + opt-in 実 e2e（P5-1） |
+| [doctor-and-setup.md](./doctor-and-setup.md) | `done` | doctor・PORTING 整合（P5-7）・ステージ健全性（P5-8） |
+| [porting-and-update.md](./porting-and-update.md) | `done` | 移植・`update.sh`（P5-4 smoke） |
 | [artifact-lifecycle.md](./artifact-lifecycle.md) | `done` | list-runs / clean-runs / latest（P4-2 smoke） |
-| [bundled-loops.md](./bundled-loops.md) | `done` | monkey-test / yabaiyo / pr-review / security-audit / deps-audit |
+| [bundled-loops.md](./bundled-loops.md) | `done` | 同梱ループ + `validate_loop_dir` / new-loop（P5-5） |
 
 ## 読者別の読み方
 
-- **拡張の種を探す**: [roadmap.md](./roadmap.md)（P0–P4 完了）と各文書の残ギャップ・需要メモ
+- **拡張の種を探す**: [roadmap.md](./roadmap.md)（P0–P5 完了 / 据え置きメモ）と各文書の残ギャップ・需要メモ
 - **現状の動きを知る**: `done` / `partial` の「現状」節と [../ARCHITECTURE.md](../ARCHITECTURE.md)
 - **移植・運用**: [porting-and-update.md](./porting-and-update.md) + [../PORTING.md](../PORTING.md)

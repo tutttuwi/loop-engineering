@@ -17,6 +17,11 @@ cp project-config/target.yaml.example project-config/targets/app-a.yaml
 ./setup/init-target-project.sh --target-name app-a
 ./engine/run-loop.sh --loop yabaiyo --target-name app-a --dry-run
 ./setup/doctor.sh --target-name app-a
+
+# レジストリ一覧
+./engine/run-loop.sh --list-targets
+./setup/doctor.sh --list-targets
+./setup/init-target-project.sh --list-targets
 ```
 
 ## 解決優先順位（target-config）

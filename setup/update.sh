@@ -46,6 +46,7 @@ Options:
   --mcp-permission-overrides <map>
                            サーバ別上書き。例: github=allow,playwright=deny
   --dry-run-loop <name>    最後に run-loop --dry-run を実行するループ名
+  --list-targets           project-config/targets/*.yaml の名前を列挙して終了
   -h, --help
 
 手順: [optional pull] → bootstrap-submodules → sync(和集合1回) → init → doctor → [optional dry-run]
@@ -73,6 +74,10 @@ while [[ $# -gt 0 ]]; do
     --target) target="$2"; shift 2 ;;
     --target-config) target_config="$2"; shift 2 ;;
     --target-name) target_registry_name="$2"; shift 2 ;;
+    --list-targets)
+      print_target_registry_list
+      exit 0
+      ;;
     --mcp-permission) mcp_permission_cli="$2"; shift 2 ;;
     --mcp-permission-overrides) mcp_permission_overrides_cli="$2"; shift 2 ;;
     --dry-run-loop) dry_run_loop="$2"; shift 2 ;;

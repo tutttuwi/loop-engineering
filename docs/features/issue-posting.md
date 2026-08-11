@@ -2,9 +2,9 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ステータス | `done`（P0-2 ゲート + CLI フォールバック実装済み） |
+| ステータス | `done`（P0-2 ゲート + CLI フォールバック + P5-3 smoke） |
 | 関連実装 | `engine/run-loop.sh`（`ISSUE_POST_INSTRUCTIONS` / ゲート）, `engine/lib/common.sh`（`verify_issue_url_file`）, `engine/lib/issue.sh`, MCP via `opencode_mcp_servers.py`, 各 `loops/*/prompt.md` |
-| ロードマップ | P0-2 |
+| ロードマップ | P0-2, P5-3 |
 
 ## 現状
 
@@ -36,6 +36,13 @@
 | --- | --- |
 | 投稿はエージェント遵守依存 | MCP 失敗時はゲートで非ゼロ（または CLI フォールバック） |
 | 細粒度 MCP permission | サーバ別 `mcp_permission_overrides` 対応（→ [permissions-unattended.md](./permissions-unattended.md) FR-PERM-4）。ツール単位は未対応 |
+
+### P5-3 smoke
+
+`./tests/smoke.sh` が stub `gh` で次を固定する:
+
+- `issue.sh create` / `comment` → `issue-url.txt`
+- `run-loop --issue-fallback cli`（stub bun で Ralph 成功・issue 欠落 → CLI 救済）
 
 ## 要件定義（P0-2）— 実装済み
 
@@ -85,3 +92,4 @@ fi
 - [x] update モードで `issue_target` 必須
 - [x] dry-run で Issue API を呼ばない
 - [x] 空白のみ・非 http(s)・パスなし URL をゲートが拒否する（smoke）
+- [x] stub `gh` で `issue.sh` create/comment と `--issue-fallback cli` 経路（P5-3 / smoke）

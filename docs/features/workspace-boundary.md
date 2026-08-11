@@ -2,8 +2,8 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ステータス | `done` |
-| 関連実装 | `engine/run-loop.sh`, `engine/lib/common.sh`, `setup/init-target-project.sh` |
+| ステータス | `done`（P5-8 ステージ健全性を doctor に追加） |
+| 関連実装 | `engine/run-loop.sh`, `engine/lib/common.sh`, `setup/init-target-project.sh`, `setup/doctor.sh` |
 | 関連ドキュメント | [../ARCHITECTURE.md](../ARCHITECTURE.md) |
 
 ## 背景
@@ -60,8 +60,11 @@ OpenCode / Ralph は **対象プロジェクトを cwd** にして動く。エ�
 
 ステージ済み `common.sh` の `LOOP_ENGINEERING_ROOT` は、配置場所から見て `.loop-engineering` を指す。現状の report/video は `SCRIPT_DIR` 相対で動くため問題ないが、**基盤ルート参照をステージ済みスクリプトに足す場合は別途設計が必要**。
 
+doctor（P5-8）は次を WARN する: `.gitignore` 欠落、`.loop-engineering` の git 追跡、ステージ済み `engine/lib` と基盤の乖離。
+
 ## 受け入れ条件
 
 - [x] dry-run の `OUTPUT_DIR` / プロンプト内パスが対象PJ配下
 - [x] エージェントが `plan.md` を Read/Write しても `external_directory` にならない
 - [x] `.gitignore` に `.loop-engineering/` が追加される
+- [x] doctor が gitignore / 追跡 / ステージ乖離を WARN（P5-8 / smoke）

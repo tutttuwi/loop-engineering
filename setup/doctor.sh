@@ -8,6 +8,7 @@
 #   ./setup/doctor.sh
 #   ./setup/doctor.sh --target-config project-config/target.yaml
 #   ./setup/doctor.sh --target-name app-a
+#   ./setup/doctor.sh --list-targets
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -16,19 +17,27 @@ source "${ROOT_DIR}/engine/lib/common.sh"
 
 target_config=""
 target_registry_name=""
+list_targets_only=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --target-config) target_config="$2"; shift 2 ;;
     --target-name) target_registry_name="$2"; shift 2 ;;
+    --list-targets) list_targets_only=1; shift ;;
     -h|--help)
       cat >&2 <<'EOF'
 Usage: doctor.sh [--target-config <path> | --target-name <name>]
+       doctor.sh --list-targets
 EOF
       exit 0
       ;;
     *) log_error "不明な引数: $1"; exit 1 ;;
   esac
 done
+
+if [[ "$list_targets_only" -eq 1 ]]; then
+  print_target_registry_list
+  exit 0
+fi
 
 ok_count=0
 warn_count=0
@@ -190,6 +199,67 @@ else
     else
       log_ok "opencode.json: ${opencode_json}"
       ok_count=$((ok_count + 1))
+      # PORTING: sync 痕跡（ECC 資材が対象へコピー済みか）
+      le_skills="${target_path}/.opencode/loop-engineering/skills"
+      le_rules="${target_path}/.opencode/loop-engineering/rules"
+      if [[ ! -d "$le_skills" && ! -d "$le_rules" ]]; then
+        log_warn "sync/init 痕跡が薄い: .opencode/loop-engineering/{skills,rules} がありません。./setup/sync-ecc-assets.sh 後に init を再実行"
+        warn_count=$((warn_count + 1))
+      else
+        log_ok "loop-engineering 資材: .opencode/loop-engineering/ あり"
+        ok_count=$((ok_count + 1))
+      fi
+      # PORTING / P5-8: .gitignore に .loop-engineering/
+      if target_has_loop_engineering_gitignore "$target_path"; then
+        log_ok ".gitignore に .loop-engineering/ あり"
+        ok_count=$((ok_count + 1))
+      else
+        log_warn ".gitignore に .loop-engineering/ がありません（init / run-loop が自動追加。手動追記も可）"
+        warn_count=$((warn_count + 1))
+      fi
+      # P5-8: .loop-engineering が git 追跡されていないこと
+      if target_loop_engineering_is_tracked "$target_path"; then
+        log_warn ".loop-engineering が git に追跡されています — .gitignore と git rm -r --cached を確認"
+        warn_count=$((warn_count + 1))
+      else
+        if git -C "$target_path" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+          log_ok ".loop-engineering は git 未追跡"
+          ok_count=$((ok_count + 1))
+        fi
+      fi
+      # P5-8: ステージ済み engine/lib の健全性（無い場合は WARN = 未 stage、init/run-loop で同期）
+      stage_report="${TMPDIR:-/tmp}/loop-eng-doctor-stage.$$"
+      if [[ -d "${target_path}/.loop-engineering/engine/lib" ]]; then
+        if check_staged_engine_lib_health "$target_path" "$stage_report"; then
+          log_ok "ステージ済み engine/lib は基盤と一致"
+          ok_count=$((ok_count + 1))
+        else
+          log_warn "ステージ済み engine/lib が基盤と乖離または欠落: $(tr '\n' ' ' <"$stage_report" 2>/dev/null || true)"
+          log_warn "  → ./setup/init-target-project.sh または run-loop で再同期"
+          warn_count=$((warn_count + 1))
+        fi
+      else
+        log_warn "ステージ未実施: ${target_path}/.loop-engineering/engine/lib がありません（初回 run-loop / init で同期）"
+        warn_count=$((warn_count + 1))
+      fi
+      rm -f "$stage_report" 2>/dev/null || true
+      # PORTING: opencode.json に lmstudio provider
+      has_lmstudio="$(python3 -c "
+import json,sys
+try:
+  c=json.load(open(sys.argv[1],encoding='utf-8'))
+  p=c.get('provider') or {}
+  print('yes' if 'lmstudio' in p else 'no')
+except Exception:
+  print('no')
+" "$opencode_json" 2>/dev/null || echo no)"
+      if [[ "$has_lmstudio" == "yes" ]]; then
+        log_ok "opencode.json に provider.lmstudio あり"
+        ok_count=$((ok_count + 1))
+      else
+        log_warn "opencode.json に provider.lmstudio が見つかりません — init 再実行を推奨"
+        warn_count=$((warn_count + 1))
+      fi
       mcp_perm="$(python3 -c "
 import json,sys
 try:

@@ -2,9 +2,9 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ステータス | `done`（P1-2 target-config 共有 + P2-4 レジストリ） |
-| 関連実装 | `project-config/target.yaml(.example)`, `project-config/targets/`, `engine/run-loop.sh`, `setup/init-target-project.sh`, `engine/lib/common.sh` (`resolve_target_config` / `--target-name`) |
-| ロードマップ | P1-2, P2-4 |
+| ステータス | `done`（P1-2 target-config 共有 + P2-4 レジストリ + P5-2 `--list-targets`） |
+| 関連実装 | `project-config/target.yaml(.example)`, `project-config/targets/`, `engine/run-loop.sh`, `setup/init-target-project.sh`, `setup/doctor.sh`, `setup/update.sh`, `engine/lib/common.sh` (`resolve_target_config` / `--target-name` / `print_target_registry_list`) |
+| ロードマップ | P1-2, P2-4, P5-2 |
 
 ## 現状
 
@@ -63,6 +63,10 @@ project-config/
 
 `project-config/targets/<name>.yaml` を列挙し、`--target-name <name>` で選択できること。
 
+### FR-TC-4（P5-2）
+
+`run-loop` / `doctor` / `init` / `update` が `--list-targets` でレジストリ名を列挙できること（`sync --list` と対称の発見 UX）。
+
 ### 制約（維持）
 
 - ネストなし・リストなしのフラット `key: value`（bash 3.2 簡易パーサ）
@@ -75,6 +79,7 @@ project-config/
 - `resolve_target_config [explicit] [registry_name]`
 - `resolve_target_registry_path <name>`
 - `list_target_registry_names`
+- `print_target_registry_list`（`--list-targets`）
 - `require_target_config_file <path> [registry_name]`
 
 ### init の表示名
@@ -96,9 +101,17 @@ cp project-config/target.yaml.example project-config/targets/app-a.yaml
 ./engine/run-loop.sh --loop yabaiyo --target-config project-config/target-b.yaml
 ```
 
+```bash
+./engine/run-loop.sh --list-targets
+./setup/doctor.sh --list-targets
+./setup/init-target-project.sh --list-targets
+./setup/update.sh --list-targets
+```
+
 ## 受け入れ条件
 
 - [x] init / run-loop で同じ `--target-config` が使える
 - [x] 既存の `target.yaml` のみ運用が壊れない
 - [x] `--target-name` で `targets/<name>.yaml` を選択できる
+- [x] `--list-targets` でレジストリ名を列挙できる（P5-2 / smoke）
 - [x] example / README と docs のキー説明が一致

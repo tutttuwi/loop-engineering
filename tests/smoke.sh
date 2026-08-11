@@ -983,6 +983,452 @@ else
   fail=$((fail + 1))
 fi
 
+# --- P5-1: opt-in e2e script exists (実 Marp は CI 外) ----------------------
+echo ""
+echo "--- P5-1 e2e-report-video (opt-in script) -----------------------------"
+if [[ -x "${ROOT_DIR}/tests/e2e-report-video.sh" ]] \
+  && grep -q 'with-video' "${ROOT_DIR}/tests/e2e-report-video.sh" \
+  && grep -q 'LOOP_MARP_VERSION' "${ROOT_DIR}/tests/e2e-report-video.sh"; then
+  log_ok "e2e-report-video.sh present (opt-in; not run in CI smoke)"
+  pass=$((pass + 1))
+else
+  log_error "e2e-report-video.sh missing or incomplete"
+  fail=$((fail + 1))
+fi
+
+# --- P5-2: --list-targets --------------------------------------------------
+echo ""
+echo "--- P5-2 --list-targets -----------------------------------------------"
+lt_name="list-targets-$$"
+lt_yaml="${ROOT_DIR}/project-config/targets/${lt_name}.yaml"
+mkdir -p "${ROOT_DIR}/project-config/targets"
+printf 'target_path: /tmp/does-not-matter\ntarget_name: list-smoke\n' >"$lt_yaml"
+cleanup_lt() { rm -f "$lt_yaml"; }
+# 既存 trap と併用するため明示削除を各所で行う
+
+set +e
+lt_out="$("${ROOT_DIR}/engine/run-loop.sh" --list-targets 2>/dev/null)"
+lt_rc=$?
+set -e
+if [[ "$lt_rc" -eq 0 ]] && printf '%s\n' "$lt_out" | grep -q -- "- ${lt_name}"; then
+  log_ok "run-loop --list-targets shows registry name"
+  pass=$((pass + 1))
+else
+  log_error "run-loop --list-targets failed (rc=${lt_rc})"
+  printf '%s\n' "$lt_out" >&2 || true
+  fail=$((fail + 1))
+fi
+
+set +e
+lt_doc="$("${ROOT_DIR}/setup/doctor.sh" --list-targets 2>/dev/null)"
+lt_doc_rc=$?
+lt_init="$("${ROOT_DIR}/setup/init-target-project.sh" --list-targets 2>/dev/null)"
+lt_init_rc=$?
+lt_upd="$("${ROOT_DIR}/setup/update.sh" --list-targets 2>/dev/null)"
+lt_upd_rc=$?
+set -e
+if [[ "$lt_doc_rc" -eq 0 && "$lt_init_rc" -eq 0 && "$lt_upd_rc" -eq 0 ]] \
+  && printf '%s\n' "$lt_doc" | grep -q -- "- ${lt_name}" \
+  && printf '%s\n' "$lt_init" | grep -q -- "- ${lt_name}" \
+  && printf '%s\n' "$lt_upd" | grep -q -- "- ${lt_name}"; then
+  log_ok "doctor/init/update --list-targets agree"
+  pass=$((pass + 1))
+else
+  log_error "doctor/init/update --list-targets mismatch"
+  fail=$((fail + 1))
+fi
+cleanup_lt
+
+# --- P5-3: Issue CLI fallback (stub gh) ------------------------------------
+echo ""
+echo "--- P5-3 issue CLI fallback -------------------------------------------"
+issue_bin="${TMP_ROOT}/issue-bin"
+mkdir -p "$issue_bin"
+cat >"${issue_bin}/gh" <<'GHEOF'
+#!/usr/bin/env bash
+set -euo pipefail
+# stub gh: issue create / comment / view
+if [[ "${1:-}" == "issue" && "${2:-}" == "create" ]]; then
+  echo "https://github.com/example/smoke/issues/99"
+  exit 0
+fi
+if [[ "${1:-}" == "issue" && "${2:-}" == "comment" ]]; then
+  exit 0
+fi
+if [[ "${1:-}" == "issue" && "${2:-}" == "view" ]]; then
+  echo "https://github.com/example/smoke/issues/42"
+  exit 0
+fi
+echo "stub gh: unexpected $*" >&2
+exit 1
+GHEOF
+chmod +x "${issue_bin}/gh"
+
+issue_body="${TMP_ROOT}/issue-body.md"
+printf '# smoke body\n' >"$issue_body"
+issue_out="${TMP_ROOT}/issue-url-create.txt"
+set +e
+PATH="${issue_bin}:${PATH}" \
+  bash "${ROOT_DIR}/engine/lib/issue.sh" create \
+    --provider github \
+    --repo-url https://github.com/example/smoke \
+    --title "smoke" \
+    --body-file "$issue_body" \
+    --output "$issue_out" \
+  >"${TMP_ROOT}/issue-create.out" 2>"${TMP_ROOT}/issue-create.err"
+issue_create_rc=$?
+set -e
+if [[ "$issue_create_rc" -eq 0 ]] \
+  && verify_issue_url_file "$issue_out" \
+  && grep -q 'issues/99' "$issue_out"; then
+  log_ok "issue.sh create (stub gh) writes issue-url.txt"
+  pass=$((pass + 1))
+else
+  log_error "issue.sh create stub failed (rc=${issue_create_rc})"
+  sed -n '1,40p' "${TMP_ROOT}/issue-create.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+issue_out2="${TMP_ROOT}/issue-url-comment.txt"
+set +e
+PATH="${issue_bin}:${PATH}" \
+  bash "${ROOT_DIR}/engine/lib/issue.sh" comment \
+    --provider github \
+    --issue 42 \
+    --repo-url https://github.com/example/smoke \
+    --body-file "$issue_body" \
+    --output "$issue_out2" \
+  >"${TMP_ROOT}/issue-comment.out" 2>"${TMP_ROOT}/issue-comment.err"
+issue_comment_rc=$?
+set -e
+if [[ "$issue_comment_rc" -eq 0 ]] && verify_issue_url_file "$issue_out2"; then
+  log_ok "issue.sh comment (stub gh) writes issue-url.txt"
+  pass=$((pass + 1))
+else
+  log_error "issue.sh comment stub failed (rc=${issue_comment_rc})"
+  sed -n '1,40p' "${TMP_ROOT}/issue-comment.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+# run-loop --issue-fallback cli: stub bun(Ralph成功・issue無し) + stub gh
+fb_target="${TMP_ROOT}/fallback-target"
+mkdir -p "$fb_target"
+# init 相当の最小 .opencode（Ralph 前に不要だが境界用）
+mkdir -p "${fb_target}/.opencode"
+printf '{}\n' >"${fb_target}/.opencode/opencode.json"
+fb_yaml="${TMP_ROOT}/fallback-target.yaml"
+cat >"$fb_yaml" <<EOF
+target_path: ${fb_target}
+target_name: fallback-smoke
+repo_provider: github
+repo_url: https://github.com/example/smoke
+default_branch: main
+issue_post_mode: create
+mcp_permission: ask
+EOF
+fb_bin="${TMP_ROOT}/fallback-bin"
+mkdir -p "$fb_bin"
+# bun stub: ralph 成功（issue-url は書かない）
+cat >"${fb_bin}/bun" <<'BUNEOF'
+#!/usr/bin/env bash
+exit 0
+BUNEOF
+chmod +x "${fb_bin}/bun"
+cp "${issue_bin}/gh" "${fb_bin}/gh"
+chmod +x "${fb_bin}/gh"
+
+set +e
+PATH="${fb_bin}:${PATH}" \
+  "${ROOT_DIR}/engine/run-loop.sh" \
+    --loop monkey-test \
+    --target-config "$fb_yaml" \
+    --issue-fallback cli \
+  >"${TMP_ROOT}/fb-run.out" 2>"${TMP_ROOT}/fb-run.err"
+fb_rc=$?
+set -e
+fb_issue="$(find "${fb_target}/.loop-engineering/output/monkey-test" -name issue-url.txt 2>/dev/null | head -n1)"
+fb_meta="$(find "${fb_target}/.loop-engineering/output/monkey-test" -name run-meta.json 2>/dev/null | head -n1)"
+if [[ "$fb_rc" -eq 0 ]] \
+  && [[ -n "$fb_issue" ]] \
+  && verify_issue_url_file "$fb_issue" \
+  && [[ -n "$fb_meta" ]] \
+  && grep -q '"exit_code": 0' "$fb_meta"; then
+  log_ok "run-loop --issue-fallback cli (stub bun+gh) writes issue-url + run-meta"
+  pass=$((pass + 1))
+else
+  log_error "run-loop issue-fallback path failed (rc=${fb_rc})"
+  sed -n '1,80p' "${TMP_ROOT}/fb-run.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+# --- P5-4: update.sh orchestration ----------------------------------------
+echo ""
+echo "--- P5-4 update.sh orchestration --------------------------------------"
+# STEP 失敗で非ゼロ
+set +e
+"${ROOT_DIR}/setup/update.sh" --loop '___no-such-loop___' \
+  >"${TMP_ROOT}/upd-fail.out" 2>"${TMP_ROOT}/upd-fail.err"
+upd_fail_rc=$?
+set -e
+if [[ "$upd_fail_rc" -ne 0 ]] \
+  && grep -q 'STEP FAILED' "${TMP_ROOT}/upd-fail.err"; then
+  log_ok "update.sh STEP failure exits non-zero"
+  pass=$((pass + 1))
+else
+  log_error "update.sh STEP failure not detected (rc=${upd_fail_rc})"
+  sed -n '1,60p' "${TMP_ROOT}/upd-fail.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+# sync→init→doctor→dry-run（--pull 無し）。doctor 必須ツールは stub で補完
+upd_target="${TMP_ROOT}/update-target"
+mkdir -p "$upd_target"
+# 事前に project-config へ monkey-test 資材がある前提で init 可能にする
+upd_yaml="${TMP_ROOT}/update-target.yaml"
+cat >"$upd_yaml" <<EOF
+target_path: ${upd_target}
+target_name: update-smoke
+repo_provider: github
+repo_url: https://github.com/example/update-smoke
+default_branch: main
+issue_post_mode: create
+mcp_permission: allow
+EOF
+upd_stub="${TMP_ROOT}/update-stub-bin"
+mkdir -p "$upd_stub"
+for cmd in bun opencode ffmpeg ffprobe npx jq gh glab; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    cat >"${upd_stub}/${cmd}" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+    chmod +x "${upd_stub}/${cmd}"
+  fi
+done
+
+set +e
+PATH="${upd_stub}:${PATH}" \
+  "${ROOT_DIR}/setup/update.sh" \
+    --all-loops \
+    --target-config "$upd_yaml" \
+    --mcp-permission allow \
+    --dry-run-loop monkey-test \
+  >"${TMP_ROOT}/upd-ok.out" 2>"${TMP_ROOT}/upd-ok.err"
+upd_ok_rc=$?
+set -e
+if [[ "$upd_ok_rc" -eq 0 ]] \
+  && grep -q 'STEP OK: sync-ecc-assets' "${TMP_ROOT}/upd-ok.err" \
+  && grep -q 'STEP OK: init-target-project' "${TMP_ROOT}/upd-ok.err" \
+  && grep -q 'STEP OK: doctor' "${TMP_ROOT}/upd-ok.err" \
+  && grep -q 'STEP OK: run-loop --dry-run' "${TMP_ROOT}/upd-ok.err" \
+  && [[ -f "${upd_target}/.opencode/opencode.json" ]]; then
+  log_ok "update.sh sync→init→doctor→dry-run (no --pull)"
+  pass=$((pass + 1))
+else
+  log_error "update.sh orchestration failed (rc=${upd_ok_rc})"
+  sed -n '1,120p' "${TMP_ROOT}/upd-ok.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+# --- P5-5: loop.yaml validate + new-loop -----------------------------------
+echo ""
+echo "--- P5-5 loop validate + new-loop -------------------------------------"
+assert_ok "validate bundled yabaiyo" validate_loop_dir "${ROOT_DIR}/loops/yabaiyo"
+assert_ok "validate bundled monkey-test" validate_loop_dir "${ROOT_DIR}/loops/monkey-test"
+
+broken_dir="${TMP_ROOT}/broken-loop"
+mkdir -p "$broken_dir"
+printf 'name: broken\nagent: opencode\n' >"${broken_dir}/loop.yaml"
+assert_fail "reject incomplete loop.yaml" validate_loop_dir "$broken_dir"
+
+nl_name="smoke-new-loop-$$"
+set +e
+"${ROOT_DIR}/setup/new-loop.sh" "$nl_name" --description "smoke new loop" \
+  >"${TMP_ROOT}/new-loop.out" 2>"${TMP_ROOT}/new-loop.err"
+nl_rc=$?
+set -e
+if [[ "$nl_rc" -eq 0 ]] \
+  && [[ -d "${ROOT_DIR}/loops/${nl_name}" ]] \
+  && validate_loop_dir "${ROOT_DIR}/loops/${nl_name}"; then
+  log_ok "new-loop.sh creates validatable loop"
+  pass=$((pass + 1))
+else
+  log_error "new-loop.sh failed (rc=${nl_rc})"
+  sed -n '1,40p' "${TMP_ROOT}/new-loop.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+set +e
+"${ROOT_DIR}/engine/run-loop.sh" \
+  --loop "$nl_name" \
+  --target-config "$target_yaml" \
+  --dry-run \
+  >"${TMP_ROOT}/nl-dry.out" 2>"${TMP_ROOT}/nl-dry.err"
+nl_dry_rc=$?
+set -e
+if [[ "$nl_dry_rc" -eq 0 ]]; then
+  log_ok "new-loop dry-run succeeds"
+  pass=$((pass + 1))
+else
+  log_error "new-loop dry-run failed (rc=${nl_dry_rc})"
+  sed -n '1,40p' "${TMP_ROOT}/nl-dry.err" >&2 || true
+  fail=$((fail + 1))
+fi
+rm -rf "${ROOT_DIR}/loops/${nl_name}"
+
+# --- P5-6: run-meta.json + --status smoke ----------------------------------
+echo ""
+echo "--- P5-6 run-meta + --status ------------------------------------------"
+# dry-run で run-meta が書かれること
+meta_run="$(find "${target_dir}/.loop-engineering/output/monkey-test" -name run-meta.json 2>/dev/null | head -n1)"
+if [[ -n "$meta_run" ]] \
+  && grep -q '"loop": "monkey-test"' "$meta_run" \
+  && grep -q '"dry_run": true' "$meta_run" \
+  && grep -q '"exit_code": 0' "$meta_run"; then
+  log_ok "dry-run writes run-meta.json (exit_code=0)"
+  pass=$((pass + 1))
+else
+  log_error "run-meta.json missing or incomplete after dry-run"
+  [[ -n "$meta_run" ]] && sed -n '1,40p' "$meta_run" >&2 || true
+  fail=$((fail + 1))
+fi
+
+# --status: ralph 未実行でもコマンド経路が動く（stub bun）
+st_bin="${TMP_ROOT}/status-bin"
+mkdir -p "$st_bin"
+cat >"${st_bin}/bun" <<'EOF'
+#!/usr/bin/env bash
+# echo status-ish and exit 0
+echo "ralph status: idle (smoke stub)"
+exit 0
+EOF
+chmod +x "${st_bin}/bun"
+set +e
+PATH="${st_bin}:${PATH}" \
+  "${ROOT_DIR}/engine/run-loop.sh" --status --target-config "$target_yaml" \
+  >"${TMP_ROOT}/status.out" 2>"${TMP_ROOT}/status.err"
+st_rc=$?
+set -e
+if [[ "$st_rc" -eq 0 ]] \
+  && grep -q 'Ralph --status' "${TMP_ROOT}/status.err" \
+  && grep -q 'smoke stub' "${TMP_ROOT}/status.out"; then
+  log_ok "run-loop --status (stub bun) exits 0"
+  pass=$((pass + 1))
+else
+  log_error "run-loop --status smoke failed (rc=${st_rc})"
+  sed -n '1,40p' "${TMP_ROOT}/status.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+# --- P5-7 / P5-8: doctor PORTING + gitignore / stage -----------------------
+echo ""
+echo "--- P5-7/P5-8 doctor PORTING + stage health ---------------------------"
+# init 済み target で .gitignore / stage / lmstudio などを見る
+port_target="${TMP_ROOT}/porting-target"
+mkdir -p "$port_target"
+port_yaml="${TMP_ROOT}/porting-target.yaml"
+cat >"$port_yaml" <<EOF
+target_path: ${port_target}
+target_name: porting-smoke
+repo_provider: github
+repo_url: https://github.com/example/porting-smoke
+default_branch: main
+issue_post_mode: create
+mcp_permission: allow
+EOF
+# init（LM Studio 無しでも json 生成）。失敗しても最小ツリーを手作り
+set +e
+PATH="${upd_stub}:${PATH}" \
+  "${ROOT_DIR}/setup/init-target-project.sh" \
+    --target-config "$port_yaml" \
+    --mcp-permission allow \
+    --no-write-target-yaml \
+  >"${TMP_ROOT}/port-init.out" 2>"${TMP_ROOT}/port-init.err"
+port_init_rc=$?
+set -e
+if [[ "$port_init_rc" -ne 0 || ! -f "${port_target}/.opencode/opencode.json" ]]; then
+  mkdir -p "${port_target}/.opencode/loop-engineering/skills" \
+    "${port_target}/.opencode/loop-engineering/rules" \
+    "${port_target}/.loop-engineering/engine/lib"
+  printf '{"provider":{"lmstudio":{}},"permission":{"mcp_*":"allow"}}\n' \
+    >"${port_target}/.opencode/opencode.json"
+  printf '.loop-engineering/\n' >"${port_target}/.gitignore"
+  stage_engine_lib_into_target "$port_target"
+fi
+
+# gitignore 欠落 WARN
+rm -f "${port_target}/.gitignore"
+set +e
+PATH="${upd_stub}:${PATH}" \
+  "${ROOT_DIR}/setup/doctor.sh" --target-config "$port_yaml" \
+  >"${TMP_ROOT}/doc-gi.out" 2>"${TMP_ROOT}/doc-gi.err"
+doc_gi_rc=$?
+set -e
+if grep -q '\.gitignore に \.loop-engineering/' "${TMP_ROOT}/doc-gi.err"; then
+  log_ok "doctor WARNs when .gitignore lacks .loop-engineering/"
+  pass=$((pass + 1))
+else
+  log_error "doctor gitignore check missing"
+  sed -n '1,100p' "${TMP_ROOT}/doc-gi.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+# 健全な状態: gitignore + stage 一致
+printf '# loop-engineering runtime\n.loop-engineering/\n' >"${port_target}/.gitignore"
+stage_engine_lib_into_target "$port_target"
+# 追跡チェック用に git init（未追跡であること）
+git -C "$port_target" init >/dev/null 2>&1 || true
+set +e
+PATH="${upd_stub}:${PATH}" \
+  "${ROOT_DIR}/setup/doctor.sh" --target-config "$port_yaml" \
+  >"${TMP_ROOT}/doc-ok.out" 2>"${TMP_ROOT}/doc-ok.err"
+doc_ok_rc=$?
+set -e
+if grep -q '\.gitignore に \.loop-engineering/ あり' "${TMP_ROOT}/doc-ok.err" \
+  && grep -q 'ステージ済み engine/lib は基盤と一致' "${TMP_ROOT}/doc-ok.err"; then
+  log_ok "doctor OK on gitignore + staged lib health"
+  pass=$((pass + 1))
+else
+  log_error "doctor healthy-target checks failed (rc=${doc_ok_rc})"
+  sed -n '1,120p' "${TMP_ROOT}/doc-ok.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+# 乖離検出: staged common.sh を改変
+printf '# tampered\n' >>"${port_target}/.loop-engineering/engine/lib/common.sh"
+set +e
+PATH="${upd_stub}:${PATH}" \
+  "${ROOT_DIR}/setup/doctor.sh" --target-config "$port_yaml" \
+  >"${TMP_ROOT}/doc-stale.out" 2>"${TMP_ROOT}/doc-stale.err"
+doc_stale_rc=$?
+set -e
+if grep -q 'ステージ済み engine/lib が基盤と乖離' "${TMP_ROOT}/doc-stale.err"; then
+  log_ok "doctor WARNs on stale staged engine/lib"
+  pass=$((pass + 1))
+else
+  log_error "doctor stale stage detection failed"
+  sed -n '1,80p' "${TMP_ROOT}/doc-stale.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+# 追跡されていると WARN
+stage_engine_lib_into_target "$port_target"
+git -C "$port_target" add -f .loop-engineering/engine/lib/common.sh >/dev/null 2>&1 || true
+set +e
+PATH="${upd_stub}:${PATH}" \
+  "${ROOT_DIR}/setup/doctor.sh" --target-config "$port_yaml" \
+  >"${TMP_ROOT}/doc-track.out" 2>"${TMP_ROOT}/doc-track.err"
+doc_track_rc=$?
+set -e
+if grep -q '\.loop-engineering が git に追跡されています' "${TMP_ROOT}/doc-track.err"; then
+  log_ok "doctor WARNs when .loop-engineering is tracked"
+  pass=$((pass + 1))
+else
+  log_error "doctor tracked-.loop-engineering check failed"
+  sed -n '1,80p' "${TMP_ROOT}/doc-track.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
 echo ""
 echo "==================================================================="
 echo " 結果: PASS=${pass} FAIL=${fail}"

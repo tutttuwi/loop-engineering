@@ -261,7 +261,8 @@ cp project-config/target.yaml.example project-config/target.yaml
 | gh / glab | 任意 | Issue投稿のCLI代替 |
 
 環境診断は `./setup/doctor.sh` でいつでも実行できます。  
-エンジンの最小回帰は `./tests/smoke.sh`（GitHub Actions: `.github/workflows/smoke.yml`）。
+エンジンの最小回帰は `./tests/smoke.sh`（GitHub Actions: `.github/workflows/smoke.yml`）。  
+手元で実 Marp（任意で動画）を通す場合は `./tests/e2e-report-video.sh`（`--with-video` 可）。
 
 Marp の再現性が必要な場合は `export LOOP_MARP_VERSION=@marp-team/marp-cli@4.5.0` を推奨します。  
 レポート/動画のホスト保険と手動再変換は [docs/features/report-video-pipeline.md](docs/features/report-video-pipeline.md) を参照。

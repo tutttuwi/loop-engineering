@@ -129,6 +129,10 @@ if readme.exists():
 PYEOF
 
 log_ok "新しいループを作成しました: loops/${loop_name}/"
+validate_loop_dir "$dest" || {
+  log_error "作成直後のループ検証に失敗しました(ひな形を確認してください)"
+  exit 1
+}
 log_info "次のステップ:"
 log_info "  1) loops/${loop_name}/loop.yaml を編集"
 log_info "  2) loops/${loop_name}/prompt.md を編集"

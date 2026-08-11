@@ -2,10 +2,10 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ステータス | `done`（Marp / `--post-report` 受け入れは smoke で固定。TTS・実動画は運用依存で e2e 対象外） |
-| 関連実装 | `engine/lib/report.sh`, `post-report.sh`, `video.sh`, `tts.sh`, `tts/*`, `common.sh` (`resolve_tts_engine`), 各ループ prompt |
-| ロードマップ | P1-3, P2-2, P2-3, P3-3 |
-| 回帰 | `./tests/smoke.sh`（`tests/fixtures/sample-report.md` + stub npx / stub video） |
+| ステータス | `done`（Marp / `--post-report` 受け入れは smoke で固定。実 Marp/動画は opt-in e2e） |
+| 関連実装 | `engine/lib/report.sh`, `post-report.sh`, `video.sh`, `tts.sh`, `tts/*`, `common.sh` (`resolve_tts_engine`), `tests/e2e-report-video.sh`, 各ループ prompt |
+| ロードマップ | P1-3, P2-2, P2-3, P3-3, P5-1 |
+| 回帰 | `./tests/smoke.sh`（stub npx）。手元: `./tests/e2e-report-video.sh` [--with-video] |
 
 ## 現状
 
@@ -81,6 +81,11 @@ bash engine/lib/post-report.sh "$OUT" "$RUNTIME"
 
 ```bash
 export LOOP_MARP_VERSION=@marp-team/marp-cli@4.5.0
+# 推奨: opt-in e2e（P5-1）
+./tests/e2e-report-video.sh
+# 動画まで: ./tests/e2e-report-video.sh --with-video   # LOOP_TTS_ENGINE 既定 none
+
+# または直接
 bash engine/lib/report.sh render \
   --input tests/fixtures/sample-report.md \
   --output-dir /tmp/loop-marp-smoke
@@ -148,4 +153,4 @@ fi
 - [x] ドキュメントにオプション・手動再変換・partial（TTS/実動画）が記載される
 - [x] `say` 不在時の TTS 既定フォールバック（`resolve_tts_engine`）
 - [x] doctor / SETUP に推奨 `LOOP_MARP_VERSION` ピン例
-- [ ] （任意・手元）実 Marp CLI / 実 ffmpeg+TTS でのフル動画 — smoke CI 外
+- [x] （任意・手元）実 Marp CLI / 実 ffmpeg+TTS でのフル動画 — `./tests/e2e-report-video.sh`（CI 外・P5-1）

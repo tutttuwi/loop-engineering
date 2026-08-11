@@ -5,12 +5,13 @@
 
 ## 現状サマリ
 
-ポータブルな「隣置き基盤」の骨格と、P0–P2 の運用ギャップはおおむね埋まっている。
+ポータブルな「隣置き基盤」の骨格と、P0–P5 の運用ギャップはおおむね埋まっている。
 
 - setup → sync-ecc（マルチループ和集合）→ init → run-loop → 対象内成果物 → Marp/動画
-- ワークスペース境界（`.loop-engineering/`）、`--status`、`update.sh`、Issue 完了ゲート、permission プロファイル、doctor（同梱ループ一覧）、smoke CI、成果物 list/clean、`security-audit` / `deps-audit` ループ
+- ワークスペース境界（`.loop-engineering/`）、`--status`、`update.sh`、Issue 完了ゲート、permission プロファイル、doctor（同梱ループ一覧 / PORTING 整合 / ステージ健全性）、smoke CI、成果物 list/clean、`security-audit` / `deps-audit` ループ
+- P5: `--list-targets`、Issue CLI smoke、`update.sh` 受け入れ、loop 検証、`run-meta.json`、opt-in 実 Marp e2e
 
-P0–P4 のロードマップ項目は完了。以降は需要ベース拡張。詳細は下の **P3 / Remaining** と **P4**。
+P0–P5 は完了。残る大きな発明は意図的に据え置き（下の「据え置き」参照）。
 
 ## 優先度定義
 
@@ -21,6 +22,7 @@ P0–P4 のロードマップ項目は完了。以降は需要ベース拡張。
 | P2 | 品質・拡張・DX |
 | P3 | 任意・後回し（動くがまだ薄い／需要待ち） |
 | P4 | P3 後の薄い運用ギャップ（smoke / doctor 発見性など） |
+| P5 | P4 後の受け入れ厚み・運用 DX・観測性（需要ベース・具体ギャップのみ） |
 
 ## P0（完了）
 
@@ -81,7 +83,32 @@ P3 完了後に残る、発明ではなく既知の回帰・発見性ギャッ�
 
 **P4 完了**（2026-08-11）。ロードマップ上の P4 項目はすべて done。
 
-**非目標（据え置き）**: ツール単位 MCP DSL、CI での実 Chromium/TTS/フル動画 e2e、需要のない新規製品ループ。
+## P5（受け入れ厚み・運用 DX・観測性）
+
+P0–P4 で骨格は揃ったあとに残っていた、**コード／文書で根拠のある**建設タスク。優先は需要と回帰リスクで選ぶ。
+
+| ID | 項目 | スコープ（一行） | 状態 |
+| --- | --- | --- | --- |
+| P5-1 | 実 Marp/Chromium/TTS+動画 e2e（opt-in） | CI 外の手元スクリプトで fixture→実 `npx` Marp→（任意）ffmpeg/TTS フル動画を通す。stub smoke は維持 | **done** — `./tests/e2e-report-video.sh`（`--with-video` 任意） |
+| P5-2 | ターゲットレジストリ発見 UX | `run-loop` / `doctor` / `init` / `update` で `--list-targets`（`list_target_registry_names` 公開）。sync `--list` と対称 | **done** |
+| P5-3 | Issue CLI フォールバックの smoke | stub `gh`/`glab` で `issue.sh` create/comment と `run-loop --issue-fallback cli` 経路を固定 | **done** — `./tests/smoke.sh` |
+| P5-4 | `update.sh` オーケストレーション受け入れ | 一時 target で sync→init→doctor→`--dry-run-loop` を smoke（`--pull` 無し）。STEP 失敗で非ゼロも固定 | **done** — `./tests/smoke.sh` |
+| P5-5 | ループ作成 DX（検証 + new-loop 回帰） | `loop.yaml` 必須キー／参照ファイル存在チェック + `new-loop.sh`→dry-run を smoke | **done** — `validate_loop_dir` |
+| P5-6 | 実行メタ / 終了コード契約 | `OUTPUT_DIR/run-meta.json`（loop / started / exit_code 等）とホスト終了コードの文書化。`--status` の smoke も | **done** |
+| P5-7 | doctor ↔ PORTING 整合 | PORTING チェックリスト未カバー（`.gitignore` に `.loop-engineering/`、sync/init 痕跡の薄い WARN 等）を doctor に寄せ | **done** |
+| P5-8 | ランタイム gitignore / ステージ健全性 | 対象 `.gitignore` の取りこぼし検出、`.loop-engineering` が追跡されていないことの doctor WARN、ステージコピーと基盤の乖離検査 | **done** |
+
+**P5 完了**（2026-08-11）。ロードマップ上の P5 項目はすべて done。
+
+**据え置き（P5 に入れない）**:
+
+- ツール単位 MCP permission DSL（OpenCode 表現に依存・[permissions-unattended.md](./permissions-unattended.md) 非目標）
+- CI ジョブでの実 Chromium / 実 TTS / フル動画（環境差・時間。P5-1 は手元 opt-in のみ）
+- Windows ネイティブ対応スクリプト（README 前提は macOS/Linux 系ツール列。需要が出てから）
+- 需要のない新規製品ループ（`_template` / `new-loop.sh` で十分）
+- ステージ済み script への `LOOP_ENGINEERING_ROOT` 参照の全面再設計（[workspace-boundary.md](./workspace-boundary.md) の既知メモ。今の report/video は `SCRIPT_DIR` 相対で足りる）
+
+関連: [report-video-pipeline.md](./report-video-pipeline.md)・[target-config.md](./target-config.md)・[issue-posting.md](./issue-posting.md)・[porting-and-update.md](./porting-and-update.md)・[bundled-loops.md](./bundled-loops.md)・[artifact-lifecycle.md](./artifact-lifecycle.md)・[doctor-and-setup.md](./doctor-and-setup.md)・[workspace-boundary.md](./workspace-boundary.md)・[loop-runner.md](./loop-runner.md)
 
 ## 推奨実装順（履歴）
 
@@ -97,7 +124,7 @@ flowchart LR
   P1_5[P1-5 artifacts]
 ```
 
-P0–P4 は完了。それ以外の拡張は需要ベース（新ループは `_template` / `new-loop.sh`）。
+P0–P5 は完了。新ループは `_template` / `new-loop.sh`。据え置きは上表の「据え置き」を参照。
 
 ## 完了の定義（マイルストーン）
 
@@ -124,3 +151,14 @@ P0–P4 は完了。それ以外の拡張は需要ベース（新ループは `_
 - [x] 未使用 `engine/opencode/opencode.json.tmpl` の整理（参考 README）
 - [x] ターゲットレジストリ（`--target-name` / `targets/*.yaml`）
 - [x] 追加ループ製品化（`security-audit` / `deps-audit`）
+
+### M4: Acceptance / Ops DX（P5）
+
+- [x] opt-in 実 Marp e2e（`./tests/e2e-report-video.sh`；CI は stub smoke 維持）
+- [x] `--list-targets`（run-loop / doctor / init / update）
+- [x] Issue CLI フォールバックの smoke（stub gh + `--issue-fallback cli`）
+- [x] `update.sh` オーケストレーション受け入れ（STEP 失敗含む）
+- [x] `validate_loop_dir` + `new-loop.sh` 回帰
+- [x] `run-meta.json` / 終了コード契約 / `--status` smoke
+- [x] doctor ↔ PORTING（gitignore / sync 痕跡 / lmstudio）
+- [x] ステージ健全性（追跡 WARN・基盤との乖離）

@@ -2,8 +2,8 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ステータス | `done`（枠組み + `security-audit` / `deps-audit` 製品化） |
-| 関連実装 | `loops/monkey-test`, `loops/yabaiyo`, `loops/pr-review`, `loops/security-audit`, `loops/deps-audit`, `loops/_template`, `setup/new-loop.sh` |
+| ステータス | `done`（枠組み + `security-audit` / `deps-audit` + P5-5 検証） |
+| 関連実装 | `loops/monkey-test`, `loops/yabaiyo`, `loops/pr-review`, `loops/security-audit`, `loops/deps-audit`, `loops/_template`, `setup/new-loop.sh`, `validate_loop_dir`（`common.sh`） |
 | 詳細 | [../LOOPS.md](../LOOPS.md) |
 
 ## 要件定義（共通）
@@ -86,6 +86,13 @@
 
 同梱ループの設定例: monkey-test=`state.md,findings.md`、yabaiyo/security-audit/deps-audit=`plan.md,findings.md`、pr-review=`review-notes.md`。
 
+## loop.yaml 検証（P5-5）
+
+`validate_loop_dir`（`engine/lib/common.sh`）が必須キーと参照ファイルを検査する。`run-loop` / `new-loop.sh` から呼ばれ、壊れた yaml の黙デフォルトを早期検出する。
+
+必須キー: `name`, `agent`, `max_iterations`, `min_iterations`, `completion_promise`, `prompt_file`, `report_template`  
+参照: `prompt_file` / `report_template` の実ファイル存在
+
 ## 受け入れ条件（現状）
 
 - [x] 同梱ループが dry-run でプロンプト展開できる（monkey-test / yabaiyo / pr-review / security-audit / deps-audit）
@@ -93,3 +100,4 @@
 - [x] セキュリティ監査専用ループ（`security-audit`）を製品化
 - [x] 依存関係監査専用ループ（`deps-audit`）を製品化
 - [x] シードファイルで初回 Read 失敗を抑制（`seed_files` + `ensure_seed_files` + smoke）
+- [x] `validate_loop_dir` + `new-loop.sh`→dry-run を smoke 固定（P5-5）

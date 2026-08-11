@@ -2,9 +2,9 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ステータス | `done`（P1-1 `update.sh` 実装済み） |
+| ステータス | `done`（P1-1 `update.sh` + P5-4 オーケストレーション smoke） |
 | 関連実装 | `setup/update.sh`, README / [../PORTING.md](../PORTING.md), setup 各スクリプト |
-| ロードマップ | P1-1 |
+| ロードマップ | P1-1, P5-4 |
 
 ## 現状
 
@@ -78,3 +78,5 @@ update.sh
 - [x] 1 コマンドで sync+init+doctor まで完了できる
 - [x] 途中失敗で非ゼロ
 - [x] README / PORTING からリンクされる
+- [x] 一時 target で sync→init→doctor→dry-run を smoke 固定（P5-4、`--pull` 無し）
+- [x] STEP 失敗で非ゼロを smoke 固定（P5-4）

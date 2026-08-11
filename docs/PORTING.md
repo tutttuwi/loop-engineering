@@ -63,6 +63,8 @@ cd tools/loop-engineering
 
 ## チェックリスト（移植完了の定義）
 
+`./setup/doctor.sh` がこれらの多くを WARN/ERROR で案内する（P5-7/P5-8）。ERROR 0 が移植完了の目安。
+
 - [ ] `./setup/doctor.sh` が ERROR 0
 - [ ] LM Studio（または互換API）に接続できる
 - [ ] `project-config/target.yaml` の `target_path` が実在する
