@@ -226,6 +226,7 @@ cd /path/to/your-project && bun ../loop-engineering/vendor/open-ralph-wiggum/ral
 | [docs/PORTING.md](docs/PORTING.md) | 他プロジェクトへの移植手順 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | ディレクトリ構成とデータの流れ |
 | [docs/LOOPS.md](docs/LOOPS.md) | 同梱ループの説明と新規追加方法 |
+| [docs/features/](docs/features/README.md) | **機能カタログ（要件定義・設計・ロードマップ）** |
 
 ## 前提ツール
 
