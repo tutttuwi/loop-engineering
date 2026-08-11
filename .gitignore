@@ -27,9 +27,12 @@ project-config/**/*.local.*
 .ralph/
 .opencode/local/
 
-# Loop execution outputs (reports, slides, videos) - generated artifacts
+# Loop execution outputs
+# 実成果物は対象プロジェクトの <target>/.loop-engineering/output/ に置く。
+# 基盤リポジトリ直下の output/ は互換用の空置き場。
 output/**
 !output/.gitkeep
+!output/README.md
 
 # Misc
 *.log

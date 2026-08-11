@@ -29,7 +29,12 @@
 | `{{DEFAULT_BRANCH}}` | 対象プロジェクトの既定ブランチ |
 | `{{RUN_ID}}` | 実行ID(タイムスタンプ) |
 | `{{RUN_DATE}}` | 実行日時 |
-| `{{OUTPUT_DIR}}` | このループ実行の出力ディレクトリ |
-| `{{ENGINE_ROOT}}` | loop-engineeringリポジトリのルート絶対パス |
+| `{{OUTPUT_DIR}}` | このループ実行の出力ディレクトリ（`<target>/.loop-engineering/output/...`） |
+| `{{ENGINE_ROOT}}` | 対象PJ内ランタイムルート（`<target>/.loop-engineering`。report/video スクリプトを同期済み） |
 | `{{COMPLETION_PROMISE}}` | 完了を示すpromiseタグの中身 |
-| `{{REPORT_TEMPLATE_PATH}}` | report-template.md の絶対パス |
+| `{{REPORT_TEMPLATE_PATH}}` | 出力ディレクトリ内にコピーされた report-template.md の絶対パス |
+| `{{ISSUE_POST_MODE}}` | `create` または `update` |
+| `{{ISSUE_TARGET}}` | update時の既存Issue番号/URL |
+| `{{ISSUE_POST_INSTRUCTIONS}}` | Issue投稿の具体的な手順文(モード別に展開済み) |
+| `{{MONKEY_TEST_TARGET_URL}}` | モンキーテスト対象URL |
+| `{{PR_REVIEW_TARGET}}` | PR/MRレビュー対象 |

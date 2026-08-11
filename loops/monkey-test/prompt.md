@@ -47,10 +47,11 @@
       {{ENGINE_ROOT}}/engine/lib/video.sh build --slides-dir {{OUTPUT_DIR}}/slides --narration {{OUTPUT_DIR}}/narration.txt --output {{OUTPUT_DIR}}/report.mp4
       ```
 
-   c. {{REPO_PROVIDER}} のMCPツールを使って `{{REPO_URL}}` にIssueを作成する。
-      タイトルは「[モンキーテスト] {{TARGET_NAME}} 探索的テスト結果 ({{RUN_ID}})」とし、
-      本文には findings.md の要約(重大度別の一覧)を記載し、report.pdf / report.mp4 の内容を
-      要約または添付(MCPで添付できない場合はファイルパスを明記)する。
+   c. {{REPO_PROVIDER}} のMCPツールを使って結果をIssueに記録する
+      (タイトル例: 「[モンキーテスト] {{TARGET_NAME}} 探索的テスト結果 ({{RUN_ID}})」。
+      本文には findings.md の重大度別一覧と report.pdf / report.mp4 への参照を含める):
+
+{{ISSUE_POST_INSTRUCTIONS}}
 
 ## 完了条件
 

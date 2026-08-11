@@ -29,7 +29,7 @@
 
 ## 出力
 
-`output/monkey-test/<RUN_ID>/` に以下が生成されます:
+`<target>/.loop-engineering/output/monkey-test/<RUN_ID>/` に以下が生成されます:
 
 - `state.md`        : 解析済み画面・実施済み操作の記録(次回イテレーションの継続に使用)
 - `findings.md`     : 発見した問題の一覧

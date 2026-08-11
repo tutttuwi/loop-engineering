@@ -5,7 +5,7 @@
 # 「もれなく・ダブりなく」のセットアップフロー:
 #   1. submoduleの初期化 (open-ralph-wiggum, ECC)
 #   2. 必須ツールの確認 (bun, opencode, ffmpeg, jq など)
-#   3. LM Studio用のopencode.jsonをグローバル設定に反映
+#   3. グローバルopencode設定は任意である旨を案内
 #   4. project-config/ の雛形ファイルを用意
 #   5. 環境診断(doctor.sh)を実行して最終確認
 #
@@ -32,11 +32,9 @@ else
   log_ok "opencode CLI: $(command -v opencode)"
 fi
 
-log_info "[3/5] LM Studio接続用のopencode設定を準備します"
-if [[ ! -f "${ROOT_DIR}/project-config/target.yaml" ]]; then
-  log_warn "project-config/target.yaml が未作成です(この後の案内に従って作成してください)"
-fi
-log_info "  ./setup/configure-opencode.sh を実行するとLM Studio用プロバイダー設定を生成できます(対話式)"
+log_info "[3/5] LM Studio接続用のopencode設定について"
+log_info "  ループ実行に必須なのは ./setup/init-target-project.sh が対象PJへ書く設定です"
+log_info "  ./setup/configure-opencode.sh は任意(マシン全体の ~/.config/opencode を整えるときだけ)"
 
 log_info "[4/5] project-config/ の雛形ファイルを確認します"
 if [[ ! -f "${ROOT_DIR}/project-config/target.yaml" && -f "${ROOT_DIR}/project-config/target.yaml.example" ]]; then
@@ -56,15 +54,20 @@ echo " 次のステップ"
 echo "==================================================================="
 cat <<'EOF'
   1) LM Studio でモデルをロードし、ローカルサーバーを起動してください
-  2) ./setup/configure-opencode.sh を実行して LM Studio 接続設定を反映してください
-  3) cp project-config/target.yaml.example project-config/target.yaml
+  2) cp project-config/target.yaml.example project-config/target.yaml
      を実行し、対象プロジェクトのパスなどを記入してください
-  4) ./setup/sync-ecc-assets.sh --loop <loop名> を実行し、ECCから必要な
+  3) ./setup/sync-ecc-assets.sh --loop <loop名> を実行し、ECCから必要な
      agents/skills/rules を project-config/ に取り込んでください
-  5) ./setup/init-target-project.sh --target <対象プロジェクトのパス>
-     を実行し、対象プロジェクトに opencode 設定を配置してください
-  6) ./engine/run-loop.sh --loop monkey-test --dry-run
+  4) ./setup/init-target-project.sh
+     を実行し、対象プロジェクトに opencode / MCP 設定を配置してください
+     （target.yaml の target_path を使用。--target で上書き可）
+  5) ./engine/run-loop.sh --loop monkey-test --dry-run
      でプロンプトが正しく生成されるか確認してから本番実行してください
+
+  任意ステップ:
+     ./setup/configure-opencode.sh
+     … マシン全体(~/.config/opencode)でも OpenCode + LM Studio を使いたいときだけ。
+       init-target-project.sh 済みならループ実行には不要です。
 
   新しいループを追加する場合:
      ./setup/new-loop.sh <名前>

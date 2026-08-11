@@ -16,7 +16,7 @@ target_path: /path/to/your/target-project
 # レポートや通知に表示する対象プロジェクトの名前
 target_name: your-project-name
 
-# Issue投稿先の種別: github | gitlab
+# Issue投稿先の種別: github | gitlab | both
 repo_provider: github
 
 # Issue投稿先リポジトリのURL (例: https://github.com/your-org/your-repo)
@@ -30,3 +30,15 @@ monkey_test_target_url: http://localhost:3000
 
 # PR/MRレビューループで対象にするPR/MRの番号またはURL
 pr_review_target: https://github.com/your-org/your-repo/pull/123
+
+# ---------------------------------------------------------------------------
+# Issue投稿モード(レビュー結果・報告のチケット起票先)
+#   create ... ループ実行ごとに新規Issueを作成する(既定。チケット番号を新規払い出し)
+#   update ... 既存Issueへコメント追記する(issue_target 必須)
+# ---------------------------------------------------------------------------
+issue_post_mode: create
+
+# issue_post_mode=update のとき使う既存Issueの番号またはURL
+# 例: 42  /  https://github.com/your-org/your-repo/issues/42
+# create のときは空でよい
+issue_target:

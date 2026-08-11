@@ -77,3 +77,43 @@ resolve_target_config() {
   fi
   printf '%s' "${LOOP_ENGINEERING_ROOT}/project-config/target.yaml"
 }
+
+# --- 対象PJ内ランタイム (.loop-engineering) -------------------------------
+# OpenCode は cwd=対象PJ で動くため、成果物や report/video スクリプトが
+# 基盤リポジトリ側にあると external_directory として拒否される。
+# 実行時は対象PJ内へステージし、エージェントが境界内だけで完結できるようにする。
+
+# 対象プロジェクトの .gitignore に .loop-engineering/ を追記する(冪等)
+ensure_loop_engineering_gitignore() {
+  local target="$1"
+  local gi="${target}/.gitignore"
+  local entry=".loop-engineering/"
+  if [[ -f "$gi" ]] && grep -qxF "$entry" "$gi" 2>/dev/null; then
+    return 0
+  fi
+  # 末尾スラッシュ無しで既に書かれている場合もスキップ
+  if [[ -f "$gi" ]] && grep -qxF ".loop-engineering" "$gi" 2>/dev/null; then
+    return 0
+  fi
+  {
+    printf '\n# loop-engineering runtime (outputs, staged engine helpers)\n'
+    printf '%s\n' "$entry"
+  } >> "$gi"
+  log_info "対象PJの .gitignore に ${entry} を追加しました: ${gi}"
+}
+
+# report/video/tts を対象PJの .loop-engineering/engine/lib へ同期する
+stage_engine_lib_into_target() {
+  local target="$1"
+  local dest_lib="${target}/.loop-engineering/engine/lib"
+  mkdir -p "${dest_lib}/tts"
+  local src_lib="${LOOP_ENGINEERING_ROOT}/engine/lib"
+  local f
+  for f in common.sh report.sh video.sh tts.sh; do
+    cp -f "${src_lib}/${f}" "${dest_lib}/${f}"
+  done
+  if [[ -d "${src_lib}/tts" ]]; then
+    cp -f "${src_lib}/tts/"*.sh "${dest_lib}/tts/" 2>/dev/null || true
+  fi
+  chmod +x "${dest_lib}/report.sh" "${dest_lib}/video.sh" "${dest_lib}/tts.sh" 2>/dev/null || true
+}

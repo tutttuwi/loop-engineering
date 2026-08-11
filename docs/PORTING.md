@@ -16,13 +16,15 @@
 ```bash
 cd ~/dev/loop-engineering
 ./setup/install.sh
-./setup/configure-opencode.sh
+# ./setup/configure-opencode.sh  … 任意（マシン全体の OpenCode 既定を整えるときだけ）
 cp project-config/target.yaml.example project-config/target.yaml
 # target_path を ~/dev/my-app に編集
 ./setup/sync-ecc-assets.sh --loop monkey-test
-./setup/init-target-project.sh --target ~/dev/my-app
+./setup/init-target-project.sh   # target.yaml の target_path を使用(--target で上書き可)
 ./engine/run-loop.sh --loop monkey-test
 ```
+
+`configure-opencode.sh` は **任意ステップ**です。ループは対象プロジェクトの `.opencode/opencode.json` を使うため、`init-target-project.sh` まで完了していればグローバル設定は不要です。
 
 ### B. 対象リポジトリの submodule にする
 
@@ -64,10 +66,12 @@ cd tools/loop-engineering
 - [ ] LM Studio（または互換API）に接続できる
 - [ ] `project-config/target.yaml` の `target_path` が実在する
 - [ ] `./setup/sync-ecc-assets.sh --loop <使うループ>` 済み
-- [ ] `./setup/init-target-project.sh --target <path>` 済み
+- [ ] `./setup/init-target-project.sh` 済み（ループ必須。`--target` 省略時は target.yaml の `target_path`）
 - [ ] 対象の `.opencode/opencode.json` に `lmstudio` と必要な MCP がある
-- [ ] `./engine/run-loop.sh --loop <name> --dry-run` でパスが正しい
+- [ ] `./engine/run-loop.sh --loop <name> --dry-run` でパスが正しい（`OUTPUT_DIR` が対象PJの `.loop-engineering/output/` 配下）
+- [ ] 対象PJの `.gitignore` に `.loop-engineering/` がある（init / run-loop が自動追加）
 - [ ] Issue 用トークン（`GITHUB_TOKEN` / `GITLAB_TOKEN`）を設定済み（投稿する場合）
+- [ ] （任意）`./setup/configure-opencode.sh` … マシン全体でも OpenCode を使う場合のみ
 
 ---
 
@@ -83,7 +87,8 @@ cat > project-config/rules/common/project-specific.md <<'EOF'
 EOF
 
 # 対象プロジェクトへ再反映
-./setup/init-target-project.sh --target /path/to/my-app
+./setup/init-target-project.sh
+# または --target /path/to/my-app
 ```
 
 `init-target-project.sh` は `instructions` に `rules/**/*.md` を列挙するため、追加した Markdown は次回同期で OpenCode に読み込まれます。
@@ -104,4 +109,5 @@ cp project-config/target.yaml.example project-config/target-b.yaml
 ./engine/run-loop.sh --loop yabaiyo --target-config project-config/target-b.yaml
 ```
 
-成果物は常に `output/<loop>/<RUN_ID>/` に分かれるため混線しません。
+成果物は常に `<target>/.loop-engineering/output/<loop>/<RUN_ID>/` に分かれるため混線しません。
+`.loop-engineering/` は対象PJの `.gitignore` に自動追加されます。

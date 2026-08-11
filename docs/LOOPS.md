@@ -20,6 +20,8 @@
 ```bash
 ./setup/sync-ecc-assets.sh --loop monkey-test
 ./setup/init-target-project.sh --target /path/to/app
+# または target.yaml の target_path があれば:
+# ./setup/init-target-project.sh
 ./engine/run-loop.sh --loop monkey-test --target /path/to/app
 ```
 
@@ -46,8 +48,10 @@
 | 目的 | 特定 MR/PR を読み解き、インライン＋総括レビューを投稿 |
 | 完了 promise | `PR_REVIEW_COMPLETE` |
 | 既定イテレーション | min 1 / max 8 |
-| 主な入力 | `pr_review_target` |
+| 主な入力 | `pr_review_target` / `issue_post_mode` / `issue_target` |
 | ECC資材 | code-reviewer, security-reviewer / architecture-decision-records / common |
+
+Issue投稿は既定で実行ごとに新規作成（`issue_post_mode: create`）。既存Issueへ追記する場合は `update` + `issue_target` を設定。
 
 詳細: [`loops/pr-review/README.md`](../loops/pr-review/README.md)
 
@@ -93,7 +97,7 @@ cp -R loops/_template loops/my-new-loop
 2. **進捗を必ずファイルに残す**（次イテレーションの入力になる）
 3. **1イテレーションで全部終わらせない前提**で書く
 4. 最後に必ず `<promise>{{COMPLETION_PROMISE}}</promise>` を指示する
-5. レポート生成コマンドは `{{ENGINE_ROOT}}/engine/lib/...` を使う（移植後もパスが通る）
+5. レポート生成コマンドは `{{ENGINE_ROOT}}/engine/lib/...` を使う（対象PJ内にステージされたパス）
 
 利用可能なテンプレート変数は [`loops/_template/README.md`](../loops/_template/README.md) を参照。
 
@@ -104,8 +108,9 @@ cp -R loops/_template loops/my-new-loop
 どのループも最終的に次を目指します（必須ではないが推奨）:
 
 ```
-output/<loop>/<RUN_ID>/
+<target>/.loop-engineering/output/<loop>/<RUN_ID>/
 ├── prompt.md          # 展開済みプロンプト
+├── report-template.md # 実行開始時にコピーされたひな形
 ├── state.md / plan.md / review-notes.md  # 進捗
 ├── findings.md        # 発見物
 ├── report.md          # Marp スライド原稿
@@ -116,3 +121,5 @@ output/<loop>/<RUN_ID>/
 ```
 
 + GitHub / GitLab Issue（MCP経由）
+
+`.loop-engineering/` は `init-target-project.sh` / `run-loop.sh` が対象PJの `.gitignore` に追加します。

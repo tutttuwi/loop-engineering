@@ -20,8 +20,10 @@
    {{ENGINE_ROOT}}/engine/lib/report.sh render --input {{OUTPUT_DIR}}/report.md --output-dir {{OUTPUT_DIR}}
    {{ENGINE_ROOT}}/engine/lib/video.sh build --slides-dir {{OUTPUT_DIR}}/slides --narration {{OUTPUT_DIR}}/narration.txt --output {{OUTPUT_DIR}}/report.mp4
    ```
-5. {{REPO_PROVIDER}} のMCPツールを使って、`{{REPO_URL}}` にIssueを作成し、
-   `{{OUTPUT_DIR}}/report.md` の要約と `{{OUTPUT_DIR}}/report.pdf` へのリンク(またはアップロード)を添付する
+5. {{REPO_PROVIDER}} のMCPツールを使って結果をIssueに記録する
+   (`{{OUTPUT_DIR}}/report.md` の要約と `{{OUTPUT_DIR}}/report.pdf` への参照を含める):
+
+{{ISSUE_POST_INSTRUCTIONS}}
 
 ## 完了条件
 

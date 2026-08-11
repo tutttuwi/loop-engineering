@@ -22,7 +22,7 @@
 
 ## 出力
 
-`output/yabaiyo/<RUN_ID>/` に以下が生成されます:
+`<target>/.loop-engineering/output/yabaiyo/<RUN_ID>/` に以下が生成されます:
 
 - `plan.md`      : 調査計画と進捗
 - `findings.md`  : 発見した不備の一覧(重大度・該当箇所・ベストプラクティス付き)

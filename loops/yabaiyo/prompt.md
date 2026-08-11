@@ -51,9 +51,11 @@
       {{ENGINE_ROOT}}/engine/lib/video.sh build --slides-dir {{OUTPUT_DIR}}/slides --narration {{OUTPUT_DIR}}/narration.txt --output {{OUTPUT_DIR}}/report.mp4
       ```
 
-   c. {{REPO_PROVIDER}} のMCPツールを使って `{{REPO_URL}}` にIssueを作成する。
-      タイトルは「[ヤバイヨ] {{TARGET_NAME}} 設計/実装レビュー結果 ({{RUN_ID}})」とし、
-      本文には findings.md の重大度別サマリーと上位の指摘事項を記載する。
+   c. {{REPO_PROVIDER}} のMCPツールを使って結果をIssueに記録する
+      (タイトル例: 「[ヤバイヨ] {{TARGET_NAME}} 設計/実装レビュー結果 ({{RUN_ID}})」)。
+      本文には findings.md の重大度別サマリーと上位の指摘事項を記載する:
+
+{{ISSUE_POST_INSTRUCTIONS}}
 
 ## 完了条件
 

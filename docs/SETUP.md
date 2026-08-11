@@ -9,13 +9,24 @@
 [1] 前提ツール導入
 [2] ./setup/install.sh          … submodule + 診断
 [3] LM Studio 起動 + モデルロード
-[4] ./setup/configure-opencode.sh
+[4] ./setup/configure-opencode.sh   … ★任意（グローバル設定）
 [5] project-config/target.yaml 作成
 [6] ./setup/sync-ecc-assets.sh --loop <name>
-[7] ./setup/init-target-project.sh --target <path>
+[7] ./setup/init-target-project.sh [--target <path>]  … ★ループ用の必須設定はここ
+    （省略時は target.yaml の target_path を使用）
 [8] ./engine/run-loop.sh --loop <name> --dry-run
 [9] ./engine/run-loop.sh --loop <name>
 ```
+
+### 設定の置き場所（必須 / 任意）
+
+| 設定 | 場所 | ループ実行に必須か |
+| --- | --- | --- |
+| 対象プロジェクトの OpenCode 設定 | `<target>/.opencode/opencode.json`（`init-target-project.sh` が生成） | **必須** |
+| グローバル OpenCode 設定 | `~/.config/opencode/opencode.json`（`configure-opencode.sh` が更新） | **任意** |
+
+ループは対象プロジェクトを cwd にして動くため、[7] まで完了していれば [4] はスキップして構いません。  
+[4] は「ホームディレクトリでも OpenCode + LM Studio / MCP を使いたい」場合の任意ステップです。
 
 ---
 
@@ -81,21 +92,63 @@ Ollama など他の OpenAI 互換サーバーでも可。その場合は次ス�
 
 ---
 
-## [4] OpenCode にローカルLLMを登録
+## [4] OpenCode グローバル設定（任意）
+
+> **任意ステップです。** ループだけ回す場合はスキップし、[5] 以降 → [7] `init-target-project.sh` で十分です。  
+> `init-target-project.sh` が `<target>/.opencode/opencode.json` に LM Studio・MCP を書き込むため、グローバル設定はループ実行には不要です。
+
+次のようなときにだけ実行してください。
+
+- 対象プロジェクト外でも、普段から OpenCode + LM Studio を使いたい
+- 複数プロジェクトで共通の MCP / モデル既定を先にマシン全体へ置いておきたい
 
 ```bash
 ./setup/configure-opencode.sh
-# 非対話例:
+# 非対話例(確認プロンプトをスキップ。既存ファイルがあればバックアップは作成する):
 # ./setup/configure-opencode.sh \
 #   --base-url http://127.0.0.1:1234/v1 \
 #   --model qwen3-coder-30b \
-#   --model-name "Qwen3 Coder 30B"
+#   --model-name "Qwen3 Coder 30B" \
+#   --mcp both \
+#   --with-playwright \
+#   --yes
 ```
 
 既定では `~/.config/opencode/opencode.json` を安全にマージ更新します。  
-既存のクラウドプロバイダー設定は維持し、`lmstudio` プロバイダーと既定モデルを追加します。
+既存のクラウドプロバイダー設定は維持し、次を追加／更新します。
 
-確認: `opencode` を起動し `/model` で `LM Studio (local)` が選べること。
+| 項目 | 内容 |
+| --- | --- |
+| `provider.lmstudio` | ローカルLLM接続 |
+| `model` | `lmstudio/<model-id>` |
+| `mcp.github` / `mcp.gitlab` | Issue / PR・MR 操作用（対話または `--mcp` で選択、既定: both） |
+| `mcp.playwright` | モンキーテスト用（既定オン） |
+| `mcp.serena` | セマンティックコード操作（既定オン・要 `uvx`） |
+| `lsp` | `true`（OpenCode 組み込み LSP、既定オン） |
+
+書き込み前に更新内容の要約を表示し、`[y/N]` で確認します。  
+既存ファイルがある場合は `opencode.json.bak.YYYYMMDD-HHMMSS` 形式でバックアップしてから更新します。  
+復元例: `cp ~/.config/opencode/opencode.json.bak.20260811-153000 ~/.config/opencode/opencode.json`
+
+トークン（Issue投稿前に設定。グローバル／プロジェクトどちらを使う場合も必要）:
+
+```bash
+export GITHUB_TOKEN=ghp_...          # GitHub MCP
+export GITLAB_TOKEN=glpat-...        # GitLab MCP
+export GITLAB_API_URL=https://gitlab.example.com/api/v4  # セルフホスト時
+```
+
+Serena 用:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh   # uvx を導入
+```
+
+Serena は起動時にブラウザでダッシュボードを開かないよう `--open-web-dashboard false` 付きで登録します。  
+ダッシュボード自体は有効なままなので、必要なら `http://127.0.0.1:24282/dashboard/` を手動で開けます。  
+既存の `opencode.json` に古い Serena 設定がある場合は `./setup/init-target-project.sh`（または `configure-opencode.sh`）を再実行して反映してください。
+
+確認: `opencode` を起動し `/model` で `LM Studio (local)` が選べること。MCP 一覧に github / gitlab / playwright / serena が出ること。
 
 ---
 
@@ -115,6 +168,8 @@ cp project-config/target.yaml.example project-config/target.yaml
 | `repo_url` | Issue 投稿先 |
 | `monkey_test_target_url` | モンキーテスト時のアプリURL |
 | `pr_review_target` | PR/MR レビュー対象（番号またはURL） |
+| `issue_post_mode` | Issue投稿: `create`(毎回新規・既定) / `update`(既存へ追記) |
+| `issue_target` | `update` 時の既存Issue番号またはURL |
 
 `target.yaml` はローカルパスを含むため `.gitignore` 対象です。
 
@@ -139,9 +194,18 @@ cp project-config/target.yaml.example project-config/target.yaml
 
 ---
 
-## [7] 対象プロジェクトへの接続
+## [7] 対象プロジェクトへの接続（ループ用の必須設定）
+
+ループ実行に必要な OpenCode 設定（LM Studio / MCP）は **ここで対象プロジェクトに書き込みます**。  
+[4] のグローバル設定をスキップしていても、このステップまで完了していればループは動けます。
+
+対象パスの優先順位: `--target` 引数 > `project-config/target.yaml` の `target_path`
 
 ```bash
+# target.yaml の target_path を使う場合(推奨)
+./setup/init-target-project.sh
+
+# パスを明示する場合(CLIが優先され、target.yaml も更新される)
 ./setup/init-target-project.sh --target /path/to/your-project \
   --lmstudio-base-url http://127.0.0.1:1234/v1 \
   --lmstudio-model qwen3-coder-30b
@@ -150,10 +214,11 @@ cp project-config/target.yaml.example project-config/target.yaml
 これが行うこと:
 
 - `project-config/{agents,skills,rules}` → `<target>/.opencode/loop-engineering/` へコピー
-- `<target>/.opencode/opencode.json` を生成（LM Studio / Playwright MCP / GitHub or GitLab MCP）
+- `<target>/.opencode/opencode.json` を生成（LM Studio / github / gitlab / playwright / serena MCP / `lsp: true`）
 - `project-config/target.yaml` の `target_path` 等を更新
 
-既存の `opencode.json` がある場合は `.bak.<timestamp>` にバックアップします。
+既存の `opencode.json` がある場合は `.bak.<timestamp>` にバックアップします。  
+個別にオフにする場合: `--without-github` / `--without-gitlab` / `--without-playwright` / `--without-serena` / `--without-lsp`
 
 ### Issue 投稿用トークン
 
@@ -170,7 +235,7 @@ cp project-config/target.yaml.example project-config/target.yaml
 ./engine/run-loop.sh --loop monkey-test --dry-run
 ```
 
-`output/<loop>/<RUN_ID>/prompt.md` が生成され、標準出力にも表示されます。  
+`<target>/.loop-engineering/output/<loop>/<RUN_ID>/prompt.md` が生成され、標準出力にも表示されます。
 パス・URL・完了 promise が意図どおりか確認してください。
 
 ---
@@ -202,7 +267,7 @@ bun .../ralph.ts --add-context "まずはログイン画面の二重送信から
 | 症状 | 対処 |
 | --- | --- |
 | `ralph.ts が見つかりません` | `./setup/bootstrap-submodules.sh` |
-| `ProviderModelNotFoundError` | `./setup/configure-opencode.sh` を再実行。`--model lmstudio/<id>` を明示 |
+| `ProviderModelNotFoundError` | 対象の `.opencode/opencode.json` に `lmstudio` があるか確認。なければ `init-target-project.sh` を再実行。グローバルを使う場合のみ `configure-opencode.sh` |
 | LM Studio に繋がらない | モデルロードと Local Server 起動を確認。`curl .../v1/models` |
 | Playwright が動かない | `init-target-project.sh` 実行済みか、対象の `opencode.json` に `mcp.playwright` があるか確認 |
 | 動画生成失敗 | `brew install ffmpeg`。TTSは `LOOP_TTS_ENGINE=none` で無音動画にもできる |
@@ -223,7 +288,7 @@ bun .../ralph.ts --add-context "まずはログイン画面の二重送信から
 | `setup/install.sh` | 初回の一括入口 | 最初の1回 |
 | `setup/bootstrap-submodules.sh` | submodule のみ | clone直後・更新時 |
 | `setup/doctor.sh` | 依存診断 | いつでも |
-| `setup/configure-opencode.sh` | グローバル LM Studio 設定 | モデル変更時 |
+| `setup/configure-opencode.sh` | **任意:** グローバル `~/.config/opencode/opencode.json` | マシン全体で OpenCode を使うとき |
 | `setup/sync-ecc-assets.sh` | ECC → project-config | ループ追加・資材更新時 |
-| `setup/init-target-project.sh` | project-config → 対象PJ | 対象PJ変更時 |
+| `setup/init-target-project.sh` | **ループ必須:** 対象PJへ opencode/MCP 設定 | 対象PJ変更時 |
 | `setup/new-loop.sh` | `_template` から新ループ作成 | アイデア追加時 |

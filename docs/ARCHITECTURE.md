@@ -25,9 +25,10 @@
 │   agents/skills/rules        │         loop-engineering/    │
 │                              │         opencode.json        │
 │                              ▼              │               │
-│                         output/<loop>/<id>/ │               │
-│                         findings, report,   │               │
-│                         slides, mp4         │               │
+│                     (ステージ)              │               │
+│                     対象PJ/.loop-engineering/               │
+│                       engine/lib/  output/<loop>/<id>/      │
+│                       findings, report, slides, mp4         │
 └─────────────────────────────────────────────┼───────────────┘
                                               │
                     ┌─────────────────────────┼──────────────┐
@@ -39,11 +40,12 @@
 ## 実行時の流れ（1ループ）
 
 1. `run-loop.sh` が `loops/<name>/loop.yaml` と `project-config/target.yaml` を読む
-2. `prompt.md` の `{{VAR}}` を展開し `output/<loop>/<RUN_ID>/prompt.md` に保存
-3. 対象プロジェクトを cwd にして `bun vendor/open-ralph-wiggum/ralph.ts` を起動
-4. Ralph が同じプロンプトを OpenCode に繰り返し渡し、`<promise>...</promise>` を待つ
-5. エージェントはファイル（`state.md` / `findings.md` 等）に進捗を残すため、次イテレーションで自己修正できる
-6. 十分集まったら Marp → スライド/PDF、ffmpeg → 動画、MCP → Issue
+2. 対象PJの `.loop-engineering/` に engine/lib を同期し、`output/<loop>/<RUN_ID>/` を作成
+3. `prompt.md` の `{{VAR}}` を展開し、同ディレクトリの `prompt.md` に保存（`report-template.md` もコピー）
+4. 対象プロジェクトを cwd にして `bun vendor/open-ralph-wiggum/ralph.ts` を起動
+5. Ralph が同じプロンプトを OpenCode に繰り返し渡し、`<promise>...</promise>` を待つ
+6. エージェントはファイル（`state.md` / `findings.md` 等）に進捗を残すため、次イテレーションで自己修正できる
+7. 十分集まったら Marp → スライド/PDF、ffmpeg → 動画、MCP → Issue
 
 ## ディレクトリ責務
 
@@ -54,7 +56,21 @@
 | `loops/` | ループアイデア（引数で切替） | アイデア追加時 |
 | `project-config/` | 対象PJ固有の接続情報とルール | **プロジェクトごと** |
 | `setup/` | セットアップ自動化 | 基盤改善時 |
-| `output/` | 実行成果物（gitignore） | 毎実行 |
+| `<target>/.loop-engineering/` | 実行時ランタイム＋成果物（対象PJの gitignore） | 毎実行 |
+
+## ワークスペース境界（重要）
+
+OpenCode / Ralph は **対象プロジェクトを cwd** にして動きます。エージェントの Read/Write/Bash は、既定でプロジェクト外パスを `external_directory` として拒否します。
+
+そのため次はすべて **対象PJ内** に置きます:
+
+| パス | 内容 |
+| --- | --- |
+| `{{OUTPUT_DIR}}` | `<target>/.loop-engineering/output/<loop>/<RUN_ID>/` |
+| `{{ENGINE_ROOT}}` | `<target>/.loop-engineering`（`engine/lib` を同期済み） |
+| `{{REPORT_TEMPLATE_PATH}}` | `{{OUTPUT_DIR}}/report-template.md`（実行開始時にコピー） |
+
+基盤リポジトリ直下の `output/` は互換用の空ディレクトリです（実成果物は使いません）。
 
 ## マルチエージェントの使い方
 
@@ -97,7 +113,10 @@ TTS 切替: `LOOP_TTS_ENGINE=say|voicevox|openai|none`
 **モデル**
 
 1. `run-loop.sh --model`
-2. 対象 / グローバルの `opencode.json` の `model`
+2. 対象プロジェクトの `.opencode/opencode.json` の `model`（`init-target-project.sh` が設定）
+3. （任意）グローバル `~/.config/opencode/opencode.json` の `model`（`configure-opencode.sh`）
+
+ループ実行時は対象プロジェクトを cwd にするため、通常は 2 で足ります。グローバル設定は任意です。
 
 ## 設計上の制約（意図的）
 

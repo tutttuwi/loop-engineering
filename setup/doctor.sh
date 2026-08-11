@@ -64,7 +64,9 @@ echo "--- 設定生成 ---------------------------------------------------------
 check_required "jq (opencode.json生成/マージに使用)" "jq" "brew install jq"
 
 echo ""
-echo "--- ローカルTTS(任意) -------------------------------------------------"
+echo "--- Serena MCP (任意) -------------------------------------------------"
+check_optional "uvx (Serena MCP実行に必要)" "uvx" "curl -LsSf https://astral.sh/uv/install.sh | sh"
+
 if command -v say >/dev/null 2>&1; then
   log_ok "macOS 'say' コマンド: 検出済み (既定TTSエンジン)"
   ok_count=$((ok_count + 1))

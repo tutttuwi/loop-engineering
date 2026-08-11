@@ -10,20 +10,36 @@ setup/init-target-project.sh から環境変数経由で呼び出される。
   LOOP_MODEL_ID              ... LM StudioのモデルID
   LOOP_MODEL_NAME            ... 表示名
   LOOP_DEST_ROOT             ... .opencode/ から見た取り込み先ディレクトリ名 (例: loop-engineering)
-  LOOP_REPO_PROVIDER         ... github | gitlab (Issue投稿用MCPサーバーの自動登録に使用)
+  LOOP_REPO_PROVIDER         ... github | gitlab | both (target.yaml向け。MCPは既定ですべて登録)
+  LOOP_ENABLE_GITHUB         ... 1|0 (省略時: 1)
+  LOOP_ENABLE_GITLAB         ... 1|0 (省略時: 1)
+  LOOP_ENABLE_PLAYWRIGHT     ... 1|0 (省略時: 1)
+  LOOP_ENABLE_SERENA         ... 1|0 (省略時: 1)
+  LOOP_ENABLE_LSP            ... 1|0 (省略時: 1)
 """
 from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from opencode_mcp_servers import apply_mcp_servers  # noqa: E402
+
+
+def _env_flag(name: str, default: bool = True) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
 
 target_json_path = Path(os.environ["LOOP_TARGET_OPENCODE_JSON"])
 base_url = os.environ["LOOP_BASE_URL"]
 model_id = os.environ["LOOP_MODEL_ID"]
 model_name = os.environ["LOOP_MODEL_NAME"]
 dest_root = os.environ.get("LOOP_DEST_ROOT", "loop-engineering")
-repo_provider = os.environ.get("LOOP_REPO_PROVIDER", "github")
 
 opencode_dir = target_json_path.parent
 agents_dir = opencode_dir / dest_root / "agents"
@@ -81,40 +97,15 @@ if agents_dir.is_dir():
             },
         }
 
-# --- mcp (Playwright / GitHub / GitLab) ------------------------------------
-# ループ内のエージェントがブラウザ操作・Issue投稿を行うためのMCPサーバーを登録する。
-# 既に同名のエントリがある場合は上書きしない(ユーザー独自設定を尊重する)。
-mcp_cfg = config.setdefault("mcp", {})
-
-mcp_cfg.setdefault("playwright", {
-    "type": "local",
-    "command": ["npx", "-y", "@playwright/mcp@latest"],
-    "enabled": True,
-})
-
-if repo_provider == "gitlab":
-    mcp_cfg.setdefault("gitlab", {
-        "type": "local",
-        "command": ["npx", "-y", "@zereight/mcp-gitlab"],
-        "environment": {
-            "GITLAB_PERSONAL_ACCESS_TOKEN": "{env:GITLAB_TOKEN}",
-            "GITLAB_API_URL": "{env:GITLAB_API_URL}",
-        },
-        "enabled": True,
-    })
-else:
-    mcp_cfg.setdefault("github", {
-        "type": "remote",
-        "url": "https://api.githubcopilot.com/mcp/",
-        "headers": {
-            "Authorization": "Bearer {env:GITHUB_TOKEN}",
-        },
-        "enabled": True,
-    })
-
-# エージェントがMCPツールを許可なく実行できるよう、Issue投稿系ツールは ask に留める
-permission = config.setdefault("permission", {})
-permission.setdefault("mcp_*", "ask")
+# --- mcp + lsp (既定ですべて有効) ------------------------------------------
+apply_mcp_servers(
+    config,
+    github=_env_flag("LOOP_ENABLE_GITHUB", True),
+    gitlab=_env_flag("LOOP_ENABLE_GITLAB", True),
+    playwright=_env_flag("LOOP_ENABLE_PLAYWRIGHT", True),
+    serena=_env_flag("LOOP_ENABLE_SERENA", True),
+    lsp=_env_flag("LOOP_ENABLE_LSP", True),
+)
 
 opencode_dir.mkdir(parents=True, exist_ok=True)
 target_json_path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
