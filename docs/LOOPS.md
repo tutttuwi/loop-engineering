@@ -60,6 +60,24 @@ Issue投稿は既定で実行ごとに新規作成（`issue_post_mode: create`�
 ./engine/run-loop.sh --loop pr-review --target /path/to/app
 ```
 
+### security-audit — セキュリティ監査ループ
+
+| 項目 | 内容 |
+| --- | --- |
+| 目的 | 対象コードのセキュリティ監査（OWASP・秘密情報・認証認可・依存関係） |
+| 完了 promise | `SECURITY_AUDIT_COMPLETE` |
+| 既定イテレーション | min 3 / max 20 |
+| ECC資材 | security-reviewer, code-reviewer / security-review, production-audit / common |
+
+一般の設計・実装品質の洗い出しは yabaiyo、本ループは悪用可能性に特化。
+
+詳細: [`loops/security-audit/README.md`](../loops/security-audit/README.md)
+
+```bash
+./setup/sync-ecc-assets.sh --loop security-audit
+./engine/run-loop.sh --loop security-audit --target /path/to/app
+```
+
 ---
 
 ## 新規ループの追加

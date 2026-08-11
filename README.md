@@ -2,7 +2,7 @@
 
 ローカルLLM（LM Studio 等）と [OpenCode](https://opencode.ai/ja)、[Open Ralph Wiggum](https://github.com/Th0rgal/open-ralph-wiggum)、[ECC (Everything Claude Code)](https://github.com/affaan-m/ECC) を組み合わせて、**同じタスクを反復しながら品質の高い成果物を得る**ループエンジニアリング基盤です。
 
-このリポジトリを他プロジェクトの隣に置く（または submodule 化する）だけで、同じ枠組みでモンキーテスト・設計監査・PR/MR レビューなどを回せます。
+このリポジトリを他プロジェクトの隣に置く（または submodule 化する）だけで、同じ枠組みでモンキーテスト・設計監査・セキュリティ監査・PR/MR レビューなどを回せます。
 
 ## できること
 
@@ -11,6 +11,7 @@
 | `monkey-test` | Playwright で例外操作を繰り返し、仕様/設計の逸脱を検出 | findings / スライド / 動画 / Issue |
 | `yabaiyo` | 計画→コード精査で設計・実装の「ヤバい」箇所を収集 | findings / スライド / 動画 / Issue |
 | `pr-review` | 特定の MR/PR を読み解き、インライン＋総括レビューを投稿 | review-notes / コメント / Issue |
+| `security-audit` | セキュリティ監査（OWASP・秘密情報・認証認可・依存関係） | findings / スライド / 動画 / Issue |
 
 新しいアイデアは `loops/_template/` をコピーするだけで追加できます（枠組みは共通、中身だけ差し替え）。
 
@@ -38,7 +39,8 @@ loop-engineering/
 │   ├── _template/                   # 新規ループのひな形
 │   ├── monkey-test/
 │   ├── yabaiyo/
-│   └── pr-review/
+│   ├── pr-review/
+│   └── security-audit/
 ├── project-config/                  # ★プロジェクト固有の差し替えポイント
 │   ├── target.yaml.example
 │   ├── target.yaml                  # 初期設定で作成（gitignore）。対象パス等
@@ -184,6 +186,7 @@ cp project-config/target.yaml.example project-config/target.yaml
 ./setup/sync-ecc-assets.sh --loop monkey-test   # モンキーテスト
 ./setup/sync-ecc-assets.sh --loop yabaiyo       # ヤバイヨ（設計/実装監査）
 ./setup/sync-ecc-assets.sh --loop pr-review     # MR/PRレビュー
+./setup/sync-ecc-assets.sh --loop security-audit # セキュリティ監査
 # target.yaml の target_path を使う( --target で上書きも可 )
 ./setup/init-target-project.sh
 
@@ -203,6 +206,10 @@ cp project-config/target.yaml.example project-config/target.yaml
 ./engine/run-loop.sh --loop pr-review
 # 既存Issueへ追記する場合の例:
 # ./engine/run-loop.sh --loop pr-review --issue-post-mode update --issue-target 42
+
+# --- security-audit ---
+./engine/run-loop.sh --loop security-audit --dry-run
+./engine/run-loop.sh --loop security-audit
 ```
 
 `./setup/configure-opencode.sh`（`~/.config/opencode/opencode.json` の更新）は **任意ステップ**です。  

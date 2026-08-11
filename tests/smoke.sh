@@ -321,6 +321,35 @@ fi
 cleanup_reg
 trap - EXIT
 
+# --- bundled loops dry-run (security-audit) --------------------------------
+echo ""
+echo "--- bundled loop dry-run (security-audit) -----------------------------"
+set +e
+"${ROOT_DIR}/engine/run-loop.sh" \
+  --loop security-audit \
+  --target-config "$target_yaml" \
+  --dry-run \
+  >"${TMP_ROOT}/dry-sa.out" 2>"${TMP_ROOT}/dry-sa.err"
+dry_sa_rc=$?
+set -e
+if [[ "$dry_sa_rc" -eq 0 ]] \
+  && grep -q "SECURITY_AUDIT_COMPLETE\|セキュリティ監査" "${TMP_ROOT}/dry-sa.out" "${TMP_ROOT}/dry-sa.err" 2>/dev/null; then
+  log_ok "security-audit dry-run expands prompt"
+  pass=$((pass + 1))
+else
+  log_error "security-audit dry-run failed (rc=${dry_sa_rc})"
+  sed -n '1,60p' "${TMP_ROOT}/dry-sa.err" >&2 || true
+  fail=$((fail + 1))
+fi
+sa_prompt_count="$(find "${target_dir}/.loop-engineering/output/security-audit" -name prompt.md 2>/dev/null | wc -l | tr -d ' ')"
+if [[ "${sa_prompt_count}" -ge 1 ]]; then
+  log_ok "security-audit dry-run wrote prompt.md (${sa_prompt_count})"
+  pass=$((pass + 1))
+else
+  log_error "security-audit dry-run missing prompt.md"
+  fail=$((fail + 1))
+fi
+
 echo ""
 echo "==================================================================="
 echo " 結果: PASS=${pass} FAIL=${fail}"

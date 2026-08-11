@@ -29,7 +29,7 @@
 | [doctor-and-setup.md](./doctor-and-setup.md) | `done` | doctor 強化・接続完了診断・TTS/Marp 案内 |
 | [porting-and-update.md](./porting-and-update.md) | `done` | 移植・`update.sh` ワンショット更新 |
 | [artifact-lifecycle.md](./artifact-lifecycle.md) | `done` | list-runs / clean-runs / latest |
-| [bundled-loops.md](./bundled-loops.md) | `done` | monkey-test / yabaiyo / pr-review |
+| [bundled-loops.md](./bundled-loops.md) | `done` | monkey-test / yabaiyo / pr-review / security-audit |
 
 ## 読者別の読み方
 

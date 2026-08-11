@@ -48,7 +48,7 @@
 | P2-3 | Marp バージョン固定の推奨明示 | doctor / docs |
 | P2-4 | ターゲットレジストリ `targets/*.yaml` | [target-config.md](./target-config.md) **done** |
 | P2-5 | 未使用 `engine/opencode/opencode.json.tmpl` 整理 | **done** — 参考として保持、[engine/opencode/README.md](../../engine/opencode/README.md) で未使用と明記 |
-| P2-6 | 追加ループ製品化 | セキュリティ監査等（枠は `_template` 済み） |
+| P2-6 | 追加ループ製品化 | **done** — [`security-audit`](../../loops/security-audit/)（枠は `_template` / `new-loop.sh`） |
 
 ## 推奨実装順
 
@@ -92,3 +92,4 @@ flowchart LR
 - [x] TTS / Marp の環境差が doctor で案内される
 - [x] 未使用 `engine/opencode/opencode.json.tmpl` の整理（参考 README）
 - [x] ターゲットレジストリ（`--target-name` / `targets/*.yaml`）
+- [x] 追加ループ製品化（`security-audit`）

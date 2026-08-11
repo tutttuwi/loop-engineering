@@ -184,6 +184,7 @@ cp project-config/target.yaml.example project-config/target.yaml
 ./setup/sync-ecc-assets.sh --loop monkey-test
 ./setup/sync-ecc-assets.sh --loop yabaiyo
 ./setup/sync-ecc-assets.sh --loop pr-review
+./setup/sync-ecc-assets.sh --loop security-audit
 
 # 利用可能な一覧を見る
 ./setup/sync-ecc-assets.sh --list
@@ -249,6 +250,7 @@ cp project-config/target.yaml.example project-config/target.yaml
 # よく使うオプション
 ./engine/run-loop.sh --loop yabaiyo --max-iterations 20
 ./engine/run-loop.sh --loop pr-review --model lmstudio/qwen3-coder-30b
+./engine/run-loop.sh --loop security-audit --max-iterations 20
 ./engine/run-loop.sh --loop monkey-test --extra "--tasks --no-commit"
 ./engine/run-loop.sh --loop yabaiyo --post-report   # Marp/動画のホスト側保険
 ```
