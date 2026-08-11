@@ -81,8 +81,21 @@ def apply_mcp_servers(
     playwright: bool = False,
     serena: bool = False,
     lsp: bool = False,
+    mcp_permission: str = "ask",
+    force_mcp_permission: bool = True,
 ) -> dict[str, Any]:
-    """config に mcp / lsp / permission をマージして返す(破壊的更新)。"""
+    """config に mcp / lsp / permission をマージして返す(破壊的更新)。
+
+    mcp_permission: ask | allow | deny
+    force_mcp_permission: True のとき init/configure 再実行で mcp_* を上書きする。
+      False のときは未設定時のみ setdefault で ask 相当を入れる。
+    """
+    allowed = {"ask", "allow", "deny"}
+    if mcp_permission not in allowed:
+        raise ValueError(
+            f"mcp_permission は {sorted(allowed)} のいずれかです: {mcp_permission!r}"
+        )
+
     mcp_cfg = config.setdefault("mcp", {})
 
     if playwright:
@@ -101,9 +114,9 @@ def apply_mcp_servers(
 
     apply_lsp(config, enabled=lsp)
 
-    # Issue投稿など副作用のあるMCPは既定で確認付き
     permission = config.setdefault("permission", {})
-    permission.setdefault("mcp_*", "ask")
+    if force_mcp_permission or "mcp_*" not in permission:
+        permission["mcp_*"] = mcp_permission
     return config
 
 

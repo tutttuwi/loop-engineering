@@ -9,8 +9,11 @@
 #
 # 対象パスの優先順位:
 #   1. --target 引数
-#   2. project-config/target.yaml の target_path
+#   2. 解決済み target.yaml の target_path
 #   3. どちらも無ければエラー
+#
+# target-config の優先順位:
+#   --target-config > --target-name(レジストリ) > LOOP_TARGET_CONFIG > project-config/target.yaml
 #
 # configure-opencode.sh（グローバル設定）は任意。ループは対象PJの
 # .opencode/opencode.json を使うため、本スクリプトまで完了していれば足りる。
@@ -18,7 +21,9 @@
 # 使い方:
 #   # target.yaml の target_path を使う(推奨)
 #   ./setup/init-target-project.sh
-#   # または明示指定(CLIが優先され、target.yaml も更新される)
+#   # レジストリから選択
+#   ./setup/init-target-project.sh --target-name app-a
+#   # または明示指定(CLIが優先され、解決済み yaml も更新される)
 #   ./setup/init-target-project.sh --target /path/to/target-project
 #
 set -euo pipefail
@@ -31,23 +36,32 @@ target=""
 base_url="http://127.0.0.1:1234/v1"
 model_id=""
 model_name=""
-target_name=""
+display_name=""
 repo_provider=""
+mcp_permission_cli=""
+target_config=""
+target_registry_name=""
 
 usage() {
   cat >&2 <<'EOF'
 Usage:
   init-target-project.sh [--target <path>] [options]
 
-対象パスの優先順位: --target > project-config/target.yaml の target_path
+対象パスの優先順位: --target > 解決済み target.yaml の target_path
+target-config の優先順位:
+  --target-config > --target-name > LOOP_TARGET_CONFIG > project-config/target.yaml
 
 Options:
   --target <path>             対象プロジェクトパス(省略時は target.yaml の target_path)
+  --target-config <path>      使用する target.yaml (既定: project-config/target.yaml)
+  --target-name <name>        project-config/targets/<name>.yaml (--target-config と排他)
   --lmstudio-base-url <url>   既定: http://127.0.0.1:1234/v1
   --lmstudio-model <id>       LM StudioのモデルID(省略時はサーバーから自動検出を試みる)
-  --lmstudio-model-name <n>   表示名
-  --target-name <name>        表示名(省略時は target.yaml → ディレクトリ名)
+  --lmstudio-model-name <n>   モデル表示名
+  --display-name <name>       対象の表示名(省略時は target.yaml の target_name → ディレクトリ名)
   --repo-provider <p>         github | gitlab | both (省略時は target.yaml → github)
+  --mcp-permission <mode>     ask|allow|deny (既定: ask。無人ループは allow)
+  --no-write-target-yaml      解決済み target.yaml を更新しない
   --without-github            mcp.github を登録しない
   --without-gitlab            mcp.gitlab を登録しない
   --without-playwright        mcp.playwright を登録しない
@@ -56,6 +70,7 @@ Options:
 
 既定では次をすべて登録します:
   mcp.github / mcp.gitlab / mcp.playwright / mcp.serena / lsp:true
+  permission.mcp_* = ask (無人実行時は --mcp-permission allow)
 EOF
 }
 
@@ -64,15 +79,20 @@ enable_gitlab=1
 enable_playwright=1
 enable_serena=1
 enable_lsp=1
+write_target_yaml=1
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --target) target="$2"; shift 2 ;;
+    --target-config) target_config="$2"; shift 2 ;;
+    --target-name) target_registry_name="$2"; shift 2 ;;
     --lmstudio-base-url) base_url="$2"; shift 2 ;;
     --lmstudio-model) model_id="$2"; shift 2 ;;
     --lmstudio-model-name) model_name="$2"; shift 2 ;;
-    --target-name) target_name="$2"; shift 2 ;;
+    --display-name) display_name="$2"; shift 2 ;;
     --repo-provider) repo_provider="$2"; shift 2 ;;
+    --mcp-permission) mcp_permission_cli="$2"; shift 2 ;;
+    --no-write-target-yaml) write_target_yaml=0; shift ;;
     --without-github) enable_github=0; shift ;;
     --without-gitlab) enable_gitlab=0; shift ;;
     --without-playwright) enable_playwright=0; shift ;;
@@ -84,7 +104,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 # --- target.yaml から既定値を解決 ------------------------------------------
-target_yaml="${ROOT_DIR}/project-config/target.yaml"
+target_yaml="$(resolve_target_config "$target_config" "$target_registry_name")" || exit 1
+# レジストリ指定時はファイル必須。既定 path は後で example から作ることもある。
+if [[ -n "$target_registry_name" || -n "$target_config" || -n "${LOOP_TARGET_CONFIG:-}" ]]; then
+  require_target_config_file "$target_yaml" "$target_registry_name" || exit 1
+fi
 if [[ -z "$target" ]]; then
   if [[ -f "$target_yaml" ]]; then
     target="$(yaml_get "$target_yaml" "target_path" "")"
@@ -92,14 +116,15 @@ if [[ -z "$target" ]]; then
 fi
 if [[ -z "$target" ]]; then
   log_error "対象プロジェクトのパスが未設定です"
-  log_error "  --target <path> を指定するか、project-config/target.yaml の target_path を設定してください"
+  log_error "  --target <path> を指定するか、target.yaml の target_path を設定してください"
   log_error "  例: cp project-config/target.yaml.example project-config/target.yaml"
+  log_error "  または: cp project-config/target.yaml.example project-config/targets/<name>.yaml"
   usage
   exit 1
 fi
 
-if [[ -z "$target_name" && -f "$target_yaml" ]]; then
-  target_name="$(yaml_get "$target_yaml" "target_name" "")"
+if [[ -z "$display_name" && -f "$target_yaml" ]]; then
+  display_name="$(yaml_get "$target_yaml" "target_name" "")"
 fi
 if [[ -z "$repo_provider" && -f "$target_yaml" ]]; then
   repo_provider="$(yaml_get "$target_yaml" "repo_provider" "")"
@@ -108,9 +133,10 @@ repo_provider="${repo_provider:-github}"
 
 [[ -d "$target" ]] || { log_error "ディレクトリが存在しません: ${target}"; exit 1; }
 target="$(cd "$target" && pwd)"
-target_name="${target_name:-$(basename "$target")}"
+display_name="${display_name:-$(basename "$target")}"
 
-log_info "対象プロジェクト: ${target} (${target_name})"
+log_info "対象プロジェクト: ${target} (${display_name})"
+log_info "target.yaml     : ${target_yaml}"
 log_info "repo_provider   : ${repo_provider}"
 
 require_cmd python3
@@ -160,6 +186,9 @@ if [[ -f "$opencode_json" ]]; then
   log_warn "既存の opencode.json をバックアップしました: ${backup}"
 fi
 
+mcp_permission="$(resolve_mcp_permission "$mcp_permission_cli" "$target_yaml")" || exit 1
+log_info "mcp_permission : ${mcp_permission}"
+
 LOOP_TARGET_OPENCODE_JSON="$opencode_json" \
 LOOP_BASE_URL="$base_url" \
 LOOP_MODEL_ID="$model_id" \
@@ -171,10 +200,14 @@ LOOP_ENABLE_GITLAB="$enable_gitlab" \
 LOOP_ENABLE_PLAYWRIGHT="$enable_playwright" \
 LOOP_ENABLE_SERENA="$enable_serena" \
 LOOP_ENABLE_LSP="$enable_lsp" \
+LOOP_MCP_PERMISSION="$mcp_permission" \
 python3 "${SCRIPT_DIR}/lib/build_target_opencode_config.py"
 
 log_ok "opencode.json を生成/更新しました: ${opencode_json}"
-log_info "登録内容: github=${enable_github} gitlab=${enable_gitlab} playwright=${enable_playwright} serena=${enable_serena} lsp=${enable_lsp}"
+log_info "登録内容: github=${enable_github} gitlab=${enable_gitlab} playwright=${enable_playwright} serena=${enable_serena} lsp=${enable_lsp} mcp_permission=${mcp_permission}"
+if [[ "$mcp_permission" == "ask" ]]; then
+  log_info "無人ループでは --mcp-permission allow を推奨します"
+fi
 if [[ "$enable_serena" -eq 1 ]] && ! command -v uvx >/dev/null 2>&1; then
   log_warn "uvx が見つかりません。Serena MCP 利用前に導入してください:"
   log_warn "  curl -LsSf https://astral.sh/uv/install.sh | sh"
@@ -186,13 +219,15 @@ mkdir -p "${target}/.loop-engineering/output"
 stage_engine_lib_into_target "$target"
 log_info "ランタイム配置: ${target}/.loop-engineering/{engine,output}"
 
-# --- project-config/target.yaml の作成/更新 ---------------------------------
-if [[ ! -f "$target_yaml" ]]; then
-  cp "${ROOT_DIR}/project-config/target.yaml.example" "$target_yaml"
-  log_info "project-config/target.yaml を新規作成しました"
-fi
+# --- project-config/target.yaml (またはレジストリ yaml) の作成/更新 ----------
+if [[ "$write_target_yaml" -eq 1 ]]; then
+  if [[ ! -f "$target_yaml" ]]; then
+    mkdir -p "$(dirname "$target_yaml")"
+    cp "${ROOT_DIR}/project-config/target.yaml.example" "$target_yaml"
+    log_info "target.yaml を新規作成しました: ${target_yaml}"
+  fi
 
-python3 - "$target_yaml" "$target" "$target_name" "$repo_provider" <<'PYEOF'
+  python3 - "$target_yaml" "$target" "$display_name" "$repo_provider" <<'PYEOF'
 import sys
 
 target_yaml, target_path, target_name, repo_provider = sys.argv[1:5]
@@ -229,6 +264,9 @@ with open(target_yaml, "w", encoding="utf-8") as f:
 
 print(f"[OK] {target_yaml} を更新しました")
 PYEOF
+else
+  log_info "--no-write-target-yaml のため target.yaml は更新しません"
+fi
 
 log_ok "対象プロジェクトの初期化が完了しました: ${target}"
 log_info "確認: cd ${target} && opencode  (/model で 'LM Studio (local)' が使えるか確認してください)"

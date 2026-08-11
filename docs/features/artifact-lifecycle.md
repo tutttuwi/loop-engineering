@@ -2,7 +2,7 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ステータス | `planned` |
+| ステータス | `done`（P1-5 list/clean/latest 実装済み） |
 | 関連実装 | なし（出力は `<target>/.loop-engineering/output/<loop>/<RUN_ID>/`） |
 | ロードマップ | P1-5 |
 

@@ -53,6 +53,7 @@
 | --- | --- | --- |
 | `vendor/` | upstream（Ralph / ECC） | submodule update 時のみ |
 | `engine/` | 実行・レポート・動画の共通枠 | 基盤改善時 |
+| `engine/opencode/` | **未使用の参考テンプレ**（実生成は `setup/lib/build_target_opencode_config.py`） | 参照のみ |
 | `loops/` | ループアイデア（引数で切替） | アイデア追加時 |
 | `project-config/` | 対象PJ固有の接続情報とルール | **プロジェクトごと** |
 | `setup/` | セットアップ自動化 | 基盤改善時 |

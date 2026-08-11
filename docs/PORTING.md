@@ -50,7 +50,8 @@ cd tools/loop-engineering
 
 | パス | 移植時 | メモ |
 | --- | --- | --- |
-| `project-config/target.yaml` | **必須で書き換え** | パス・Issue先 |
+| `project-config/target.yaml` | **必須で書き換え**（単一PJ） | パス・Issue先 |
+| `project-config/targets/*.yaml` | 複数PJ時 | `--target-name` で切替。gitignore |
 | `project-config/rules/` | 必要なら編集 | プロジェクト規約 |
 | `project-config/agents/` `skills/` | 必要なら追加 | ECC同期後にカスタム可 |
 | `loops/<name>/` | アイデア追加時のみ | 共通ループはそのまま使える |
@@ -86,9 +87,18 @@ cat > project-config/rules/common/project-specific.md <<'EOF'
 - PIIはログに出さない
 EOF
 
+# 再 sync しても project-specific.md は残る
+# (project-config/.ecc-sync-manifest 外のファイルはユーザー資産)
+./setup/sync-ecc-assets.sh --loop yabaiyo
+
 # 対象プロジェクトへ再反映
 ./setup/init-target-project.sh
-# または --target /path/to/my-app
+```
+
+基盤の一括更新:
+
+```bash
+./setup/update.sh --loop yabaiyo --dry-run-loop yabaiyo
 ```
 
 `init-target-project.sh` は `instructions` に `rules/**/*.md` を列挙するため、追加した Markdown は次回同期で OpenCode に読み込まれます。
@@ -97,17 +107,27 @@ EOF
 
 ## 複数プロジェクトを並行して回す
 
-`target.yaml` は1ファイルですが、実行時に上書きできます。
+既定は `project-config/target.yaml` 1本。複数ならレジストリか明示パスを使う。
 
 ```bash
-# プロジェクトA
-./engine/run-loop.sh --loop monkey-test --target /path/to/app-a
+# レジストリ（推奨）
+cp project-config/target.yaml.example project-config/targets/app-a.yaml
+cp project-config/target.yaml.example project-config/targets/app-b.yaml
+# 各ファイルの target_path 等を編集
 
-# プロジェクトB（別の設定ファイルを使う）
-cp project-config/target.yaml.example project-config/target-b.yaml
-# 編集後
+./setup/init-target-project.sh --target-name app-a
+./engine/run-loop.sh --loop monkey-test --target-name app-a
+
+./engine/run-loop.sh --loop yabaiyo --target-name app-b
+
+# 明示パス（レジストリ外の一時ファイルでも可）
 ./engine/run-loop.sh --loop yabaiyo --target-config project-config/target-b.yaml
+
+# パスだけ上書き（yaml の他キーはそのまま）
+./engine/run-loop.sh --loop monkey-test --target /path/to/app-a
 ```
 
 成果物は常に `<target>/.loop-engineering/output/<loop>/<RUN_ID>/` に分かれるため混線しません。
 `.loop-engineering/` は対象PJの `.gitignore` に自動追加されます。
+
+詳細: [project-config/targets/README.md](../project-config/targets/README.md) / [docs/features/target-config.md](./features/target-config.md)

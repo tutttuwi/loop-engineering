@@ -2,7 +2,7 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ステータス | `partial` |
+| ステータス | `done`（P0-4 `--status` 実装済み。Issue ゲートも run-loop に統合） |
 | 関連実装 | `engine/run-loop.sh`, `engine/lib/render-prompt.sh`, `vendor/open-ralph-wiggum` |
 | ロードマップ | P0-4 |
 

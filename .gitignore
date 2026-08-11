@@ -21,6 +21,8 @@ __pycache__/
 .env.*
 !*.env.example
 project-config/target.yaml
+project-config/targets/*.yaml
+!project-config/targets/README.md
 project-config/**/*.local.*
 
 # Ralph / OpenCode runtime state (created inside target projects, but ignore if present here)

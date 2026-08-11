@@ -8,13 +8,14 @@
 
 | パス | 役割 | 生成方法 |
 | --- | --- | --- |
-| `target.yaml` | 対象プロジェクトのパス・Issue投稿先などの接続情報 | `target.yaml.example` をコピーして編集 |
+| `target.yaml` | 対象プロジェクトのパス・Issue投稿先などの接続情報（既定） | `target.yaml.example` をコピーして編集 |
+| `targets/<name>.yaml` | 複数ターゲット用レジストリ（`--target-name`） | example を `targets/` へコピー。詳細は [targets/README.md](./targets/README.md) |
 | `agents/` | ループが使うOpenCode subagentプロンプト | `../setup/sync-ecc-assets.sh` でECCから抽出、または自作 |
 | `skills/` | ループが参照するナレッジ/ワークフロー定義(SKILL.md) | 同上 |
 | `rules/` | プロジェクトのコーディング規約・レビュー観点 | 同上 |
 
-`target.yaml` と `agents/`, `skills/`, `rules/` の中身は `.gitignore` で除外していません
-(`target.yaml` 自体は除外対象)。チームで共有したいルールがあればコミットしてください。
+`target.yaml` / `targets/*.yaml` と `agents/`, `skills/`, `rules/` の中身のうち、
+ローカルパスを含む yaml は `.gitignore` 対象です。チームで共有したいルールがあればコミットしてください。
 
 ## 他プロジェクトへの移植手順(概要)
 

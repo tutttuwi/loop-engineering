@@ -6,6 +6,9 @@ max_iterations: 25
 min_iterations: 3
 completion_promise: MONKEY_TEST_COMPLETE
 
+require_issue: true
+seed_files: state.md,findings.md
+
 prompt_file: prompt.md
 report_template: report-template.md
 

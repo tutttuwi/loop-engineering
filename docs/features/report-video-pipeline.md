@@ -2,8 +2,8 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ステータス | `partial` |
-| 関連実装 | `engine/lib/report.sh`, `video.sh`, `tts.sh`, `tts/*`, 各ループ prompt |
+| ステータス | `partial`（P1-3 / P2-2 / P2-3 実装済み。post-report 受け入れ検証は継続） |
+| 関連実装 | `engine/lib/report.sh`, `video.sh`, `tts.sh`, `tts/*`, `common.sh` (`resolve_tts_engine`), 各ループ prompt |
 | ロードマップ | P1-3, P2-2, P2-3 |
 
 ## 現状
@@ -15,14 +15,15 @@
 | `tts.sh` | テキスト | 音声（`LOOP_TTS_ENGINE=say\|voicevox\|openai\|none`） |
 
 - エージェントが bash で `{{ENGINE_ROOT}}/engine/lib/...` を呼ぶ前提
-- Marp は `npx @marp-team/marp-cli@latest`（`LOOP_MARP_VERSION` で上書き可）
+- Marp は既定 `npx @marp-team/marp-cli@latest`（再現性のため `LOOP_MARP_VERSION=@marp-team/marp-cli@4.5.0` 推奨）
+- TTS 未設定時: `say` があれば `say`、なければ VOICEVOX 起動中なら `voicevox`、それ以外は `none`
 - 対象PJ内にステージされたコピーを実行
+- `run-loop.sh --post-report` でホスト側ポスト処理可能
 
 ### ギャップ
 
-- ポストループ自動実行なし（エージェントが飛ばすと PDF/mp4 欠落）
-- 毎回 `@latest` はオフライン・再現性に弱い
-- TTS 既定 `say` は macOS 寄り
+- post-report の受け入れ条件（report.md のみ / 欠落時スキップ）の回帰テストは薄い
+- 既定 Marp はまだ `@latest`（ピンは環境変数で明示）
 
 ## 要件定義
 
@@ -84,4 +85,6 @@ fi
 
 - [ ] report.md のみある状態で `--post-report` → report.pdf / slides が生成される
 - [ ] report.md 無しではスキップ（エラーにしないか、明示 WARN）
-- [ ] ドキュメントにオプションが記載される
+- [x] ドキュメントにオプションが記載される
+- [x] `say` 不在時の TTS 既定フォールバック（`resolve_tts_engine`）
+- [x] doctor / SETUP に推奨 `LOOP_MARP_VERSION` ピン例

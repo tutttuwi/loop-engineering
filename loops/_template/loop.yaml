@@ -19,6 +19,11 @@ min_iterations: 1
 # このタグが出力に含まれるとループを終了する
 completion_promise: TEMPLATE_COMPLETE
 
+# ホスト側 Issue 完了ゲート (true|false)。Issue不要なループは false
+require_issue: true
+# 実行開始時に空ファイルを作る進捗ファイル(カンマ区切り)
+seed_files: findings.md
+
 # このディレクトリ内のファイル名(相対パス)
 prompt_file: prompt.md
 report_template: report-template.md

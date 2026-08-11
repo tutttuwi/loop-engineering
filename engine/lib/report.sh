@@ -51,6 +51,7 @@ require_cmd npx "Node.js (npm付属)をインストールしてください: htt
 mkdir -p "${output_dir}/slides"
 
 MARP_VERSION="${LOOP_MARP_VERSION:-@marp-team/marp-cli@latest}"
+# 再現性のためピン推奨: export LOOP_MARP_VERSION=@marp-team/marp-cli@4.5.0
 
 log_info "Marp CLIでスライド画像(PNG)を生成中... (${input})"
 npx --yes "$MARP_VERSION" "$input" \

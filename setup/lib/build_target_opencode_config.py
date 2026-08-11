@@ -16,6 +16,7 @@ setup/init-target-project.sh から環境変数経由で呼び出される。
   LOOP_ENABLE_PLAYWRIGHT     ... 1|0 (省略時: 1)
   LOOP_ENABLE_SERENA         ... 1|0 (省略時: 1)
   LOOP_ENABLE_LSP            ... 1|0 (省略時: 1)
+  LOOP_MCP_PERMISSION        ... ask|allow|deny (省略時: ask)
 """
 from __future__ import annotations
 
@@ -35,11 +36,19 @@ def _env_flag(name: str, default: bool = True) -> bool:
     return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
+def _mcp_permission() -> str:
+    raw = (os.environ.get("LOOP_MCP_PERMISSION") or "ask").strip().lower()
+    if raw not in ("ask", "allow", "deny"):
+        raise SystemExit(f"LOOP_MCP_PERMISSION は ask|allow|deny です: {raw}")
+    return raw
+
+
 target_json_path = Path(os.environ["LOOP_TARGET_OPENCODE_JSON"])
 base_url = os.environ["LOOP_BASE_URL"]
 model_id = os.environ["LOOP_MODEL_ID"]
 model_name = os.environ["LOOP_MODEL_NAME"]
 dest_root = os.environ.get("LOOP_DEST_ROOT", "loop-engineering")
+mcp_permission = _mcp_permission()
 
 opencode_dir = target_json_path.parent
 agents_dir = opencode_dir / dest_root / "agents"
@@ -105,8 +114,10 @@ apply_mcp_servers(
     playwright=_env_flag("LOOP_ENABLE_PLAYWRIGHT", True),
     serena=_env_flag("LOOP_ENABLE_SERENA", True),
     lsp=_env_flag("LOOP_ENABLE_LSP", True),
+    mcp_permission=mcp_permission,
+    force_mcp_permission=True,
 )
 
 opencode_dir.mkdir(parents=True, exist_ok=True)
 target_json_path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-print(f"[OK] {target_json_path} を書き込みました")
+print(f"[OK] {target_json_path} を書き込みました (mcp_permission={mcp_permission})")

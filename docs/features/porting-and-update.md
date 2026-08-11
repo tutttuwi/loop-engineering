@@ -2,7 +2,7 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ステータス | `partial` |
+| ステータス | `done`（P1-1 `update.sh` 実装済み） |
 | 関連実装 | README 手動手順, `docs/PORTING.md`, setup 各スクリプト |
 | ロードマップ | P1-1 |
 

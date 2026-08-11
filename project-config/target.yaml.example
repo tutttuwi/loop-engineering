@@ -7,6 +7,11 @@
 # 使い方: このファイルを project-config/target.yaml としてコピーし、値を編集する
 #   cp project-config/target.yaml.example project-config/target.yaml
 #
+# 複数プロジェクトを切り替える場合:
+#   mkdir -p project-config/targets
+#   cp project-config/target.yaml.example project-config/targets/app-a.yaml
+#   ./engine/run-loop.sh --loop yabaiyo --target-name app-a
+#
 # 制約: このツールキットの設定ファイルは「ネストなし・リストなしのフラットな key: value」のみ
 #       サポートする(engine/lib/common.sh の簡易YAMLリーダーの制約)。
 
@@ -42,3 +47,7 @@ issue_post_mode: create
 # 例: 42  /  https://github.com/your-org/your-repo/issues/42
 # create のときは空でよい
 issue_target:
+
+# OpenCode MCP permission: ask(対話確認・既定) | allow(無人ループ) | deny
+# init 時の --mcp-permission / LOOP_MCP_PERMISSION が優先
+mcp_permission: ask

@@ -2,7 +2,7 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ステータス | `partial` |
+| ステータス | `done`（P0-3 Target/Auth 診断追加済み） |
 | 関連実装 | `setup/doctor.sh`, `setup/install.sh` |
 | ロードマップ | P0-3 |
 
@@ -13,16 +13,14 @@ doctor が見るもの（概略）:
 - bun / opencode / node / ffmpeg / python3 / git 等のコマンド
 - submodule（ralph / ecc）の存在
 - LM Studio 疎通（任意・WARN）
+- Target readiness（`target.yaml` / init / mcp permission）
+- Auth / Issue readiness（token / gh / glab）
+- TTS / Marp（`say` 有無と既定エンジン、`LOOP_MARP_VERSION` ピン推奨）
 
 ### 見ないもの（ギャップ）
 
-- `project-config/target.yaml` の有無・`target_path` 実在
-- 対象の `.opencode/opencode.json`（init 済みか）
-- `GITHUB_TOKEN` / `GITLAB_TOKEN`
-- `gh` / `glab`（フォールバック用）
-- sync / init の実施痕跡
-- `.loop-engineering` ステージの健全性
-- `LOOP_MCP_PERMISSION` / permission プロファイル
+- sync / init の実施痕跡の詳細監査
+- `.loop-engineering` ステージの健全性の深い検査
 
 ドキュメントの PORTING チェックリストと doctor が一致していない。
 

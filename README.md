@@ -42,6 +42,7 @@ loop-engineering/
 ├── project-config/                  # ★プロジェクト固有の差し替えポイント
 │   ├── target.yaml.example
 │   ├── target.yaml                  # 初期設定で作成（gitignore）。対象パス等
+│   ├── targets/                     # 複数PJ用レジストリ（--target-name）
 │   ├── agents/                      # sync-ecc で抽出 → init で対象へコピー
 │   ├── skills/
 │   └── rules/
@@ -125,25 +126,23 @@ my-app/.loop-engineering/output/<loop>/<RUN_ID>/
 
 ### 4. このプロジェクト更新時のアップデート
 
-基盤（loop-engineering）に更新が入ったら、だいたい次の順で反映します。
-
 ```bash
 cd ~/dev/loop-engineering
 
-# A. 基盤本体を更新
-git pull
-./setup/bootstrap-submodules.sh          # vendor (Ralph / ECC) を追従
-# または: git submodule update --init --recursive
+# 推奨: ワンショット更新
+./setup/update.sh --loop yabaiyo --dry-run-loop yabaiyo
+# 複数ループ + 無人 permission + git pull もする場合:
+# ./setup/update.sh --pull --loop yabaiyo --loop monkey-test \
+#   --mcp-permission allow --dry-run-loop yabaiyo
+```
 
-# B. ECC 抽出物をやり直す（使うループ分）
+手動で段階実行する場合:
+
+```bash
+git pull                                 # 任意
+./setup/bootstrap-submodules.sh
 ./setup/sync-ecc-assets.sh --loop yabaiyo
-# 必要なら monkey-test / pr-review も同様
-
-# C. 対象PJへ再反映（opencode.json・agents/skills/rules・engine/lib）
 ./setup/init-target-project.sh
-# target.yaml の target_path を使用。--target で上書き可
-
-# D. 動作確認
 ./setup/doctor.sh
 ./engine/run-loop.sh --loop yabaiyo --dry-run
 ```
@@ -151,22 +150,21 @@ git pull
 | 更新したいもの | やること |
 | --- | --- |
 | `engine/` / `setup/` / `loops/` の修正 | `git pull` だけで次の `run-loop` から有効（対象へコピー不要） |
-| Ralph / ECC upstream | `bootstrap-submodules.sh`（または submodule update） |
-| 対象の agents/skills/rules / opencode.json | `sync-ecc-assets` → `init-target-project` |
+| Ralph / ECC upstream | `bootstrap-submodules.sh`（または `update.sh`） |
+| 対象の agents/skills/rules / opencode.json | `sync-ecc-assets` → `init-target-project`（`update.sh` が実行） |
 | 対象の report/video スクリプト | `run-loop` のたびに自動同期（または init でも同期） |
-| 自分で編集した `project-config/rules` 等 | `sync` 後も残る想定。衝突時は手元の差分を確認してから `init` |
+| 自分で編集した `project-config/rules` 等 | **マニフェスト外は sync で消えない**（`.ecc-sync-manifest` 管理） |
 
-対象を submodule として埋め込んでいる場合は、対象リポジトリ側で:
+成果物の確認・掃除:
 
 ```bash
-cd my-app/tools/loop-engineering   # 配置に合わせてパスを調整
-git pull
-git submodule update --init --recursive
-./setup/sync-ecc-assets.sh --loop <name>
-./setup/init-target-project.sh --target ../..
+./engine/list-runs.sh --loop yabaiyo
+./engine/clean-runs.sh --loop yabaiyo --keep 5 --dry-run
 ```
 
-詳細は [docs/PORTING.md](docs/PORTING.md) / [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) を参照。
+複数プロジェクトは `project-config/targets/<name>.yaml` + `--target-name <name>` で切り替え（詳細は [docs/PORTING.md](docs/PORTING.md)）。
+
+詳細は [docs/PORTING.md](docs/PORTING.md) / [docs/features/](docs/features/README.md) を参照。
 
 ## 5分クイックスタート
 
@@ -214,8 +212,17 @@ cp project-config/target.yaml.example project-config/target.yaml
 別ターミナルで進捗確認:
 
 ```bash
-cd /path/to/your-project && bun ../loop-engineering/vendor/open-ralph-wiggum/ralph.ts --status
-# または対象プロジェクトで ralph がPATHにあれば: ralph --status
+./engine/run-loop.sh --status
+# または --target /path/to/your-project
+```
+
+無人ループ（MCP 確認なし）で回す場合:
+
+```bash
+./setup/init-target-project.sh --mcp-permission allow
+./engine/run-loop.sh --loop yabaiyo
+# Issue 未投稿時は非ゼロ終了。CLI で救済する例:
+# ./engine/run-loop.sh --loop yabaiyo --issue-fallback cli
 ```
 
 ## ドキュメント
@@ -240,7 +247,10 @@ cd /path/to/your-project && bun ../loop-engineering/vendor/open-ralph-wiggum/ral
 | LM Studio 等 | ○ | ローカル LLM（OpenAI互換API） |
 | gh / glab | 任意 | Issue投稿のCLI代替 |
 
-環境診断は `./setup/doctor.sh` でいつでも実行できます。
+環境診断は `./setup/doctor.sh` でいつでも実行できます。  
+エンジンの最小回帰は `./tests/smoke.sh`（GitHub Actions: `.github/workflows/smoke.yml`）。
+
+Marp の再現性が必要な場合は `export LOOP_MARP_VERSION=@marp-team/marp-cli@4.5.0` を推奨します。
 
 ## ライセンス
 

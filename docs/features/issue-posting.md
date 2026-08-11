@@ -2,7 +2,7 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ステータス | `partial` |
+| ステータス | `done`（P0-2 ゲート + CLI フォールバック実装済み） |
 | 関連実装 | `engine/run-loop.sh`（`ISSUE_POST_INSTRUCTIONS`）, MCP via `opencode_mcp_servers.py`, 各 `loops/*/prompt.md` |
 | ロードマップ | P0-2 |
 

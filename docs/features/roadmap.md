@@ -46,8 +46,8 @@
 | P2-1 | エンジン smoke テスト / CI | render-prompt、dry-run、yaml_get |
 | P2-2 | Linux 既定 TTS 自動選択 | `say` 不在時 `none`/`voicevox` |
 | P2-3 | Marp バージョン固定の推奨明示 | doctor / docs |
-| P2-4 | ターゲットレジストリ `targets/*.yaml` | [target-config.md](./target-config.md) |
-| P2-5 | 未使用 `engine/opencode/opencode.json.tmpl` 整理 | |
+| P2-4 | ターゲットレジストリ `targets/*.yaml` | [target-config.md](./target-config.md) **done** |
+| P2-5 | 未使用 `engine/opencode/opencode.json.tmpl` 整理 | **done** — 参考として保持、[engine/opencode/README.md](../../engine/opencode/README.md) で未使用と明記 |
 | P2-6 | 追加ループ製品化 | セキュリティ監査等（枠は `_template` 済み） |
 
 ## 推奨実装順
@@ -73,20 +73,22 @@ flowchart LR
 
 ### M1: Unattended Ready
 
-- [ ] ループを対話なしで完走できる permission プロファイルがある
-- [ ] Issue 未投稿のまま promise で「完了」にならない
-- [ ] `doctor` が target / init / token 不足を WARN/ERROR で出す
-- [ ] `--status` が動くか、文書から消えている
+- [x] ループを対話なしで完走できる permission プロファイルがある
+- [x] Issue 未投稿のまま promise で「完了」にならない
+- [x] `doctor` が target / init / token 不足を WARN/ERROR で出す
+- [x] `--status` が動くか、文書から消えている
 
 ### M2: Ops Ready
 
-- [ ] `update.sh` で pull→sync→init→doctor が一発
-- [ ] init と run-loop が同じ target-config 解決規則
-- [ ] エージェントが Marp を飛ばしても `--post-report` で救済可能
-- [ ] カスタム rules が sync で不意に消えない
+- [x] `update.sh` で pull→sync→init→doctor が一発
+- [x] init と run-loop が同じ target-config 解決規則
+- [x] エージェントが Marp を飛ばしても `--post-report` で救済可能
+- [x] カスタム rules が sync で不意に消えない
 
 ### M3: Quality
 
-- [ ] smoke CI
-- [ ] 成果物の list/clean
-- [ ] TTS / Marp の環境差が doctor で案内される
+- [x] smoke CI（`./tests/smoke.sh` / `.github/workflows/smoke.yml`）
+- [x] 成果物の list/clean（`list-runs` / `clean-runs`）
+- [x] TTS / Marp の環境差が doctor で案内される
+- [x] 未使用 `engine/opencode/opencode.json.tmpl` の整理（参考 README）
+- [x] ターゲットレジストリ（`--target-name` / `targets/*.yaml`）

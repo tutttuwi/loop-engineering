@@ -2,15 +2,20 @@
 # setup/sync-ecc-assets.sh
 #
 # vendor/ecc (Everything Claude Code, ECC) から、必要な agents / skills / rules だけを
-# project-config/ 配下へ抽出コピーする。ECC全体は非常に大きく多言語・多フレームワーク
-# 対応のため、実際に使う分だけを差し替え可能な project-config/ に取り込む方針とする。
+# project-config/ 配下へ抽出コピーする。
 #
-# コピー元 (vendor/ecc) は直接編集しない。差分が必要な場合は project-config/ 側を編集すること。
+# カスタム保護:
+#   project-config/.ecc-sync-manifest に前回 sync で配置した相対パスを記録する。
+#   - マニフェスト記載のパスのみ削除・上書きの対象
+#   - マニフェストに無いファイルはユーザー資産として保持(上書きしない)
+#
+# bash 3.2 互換(連想配列を使わない)。
 #
 # 使い方:
-#   ./setup/sync-ecc-assets.sh --loop monkey-test              # loops/monkey-test/loop.yaml の指定に従う
-#   ./setup/sync-ecc-assets.sh --agents architect,code-reviewer --skills security-review --rules common,web
-#   ./setup/sync-ecc-assets.sh --list                           # ECC内で利用可能な一覧を表示するだけ
+#   ./setup/sync-ecc-assets.sh --loop monkey-test
+#   ./setup/sync-ecc-assets.sh --agents architect --skills x --rules common
+#   ./setup/sync-ecc-assets.sh --list
+#   ./setup/sync-ecc-assets.sh --loop yabaiyo --backup
 #
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,22 +24,27 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "${ROOT_DIR}/engine/lib/common.sh"
 
 ECC_DIR="${ROOT_DIR}/vendor/ecc"
-DEST_AGENTS="${ROOT_DIR}/project-config/agents"
-DEST_SKILLS="${ROOT_DIR}/project-config/skills"
-DEST_RULES="${ROOT_DIR}/project-config/rules"
+DEST_ROOT="${ROOT_DIR}/project-config"
+DEST_AGENTS="${DEST_ROOT}/agents"
+DEST_SKILLS="${DEST_ROOT}/skills"
+DEST_RULES="${DEST_ROOT}/rules"
+MANIFEST="${DEST_ROOT}/.ecc-sync-manifest"
 
 loop_name=""
 agents_csv=""
 skills_csv=""
 rules_csv=""
 list_only=0
+do_backup=0
 
 usage() {
   cat >&2 <<'EOF'
 Usage:
-  sync-ecc-assets.sh --loop <name>
-  sync-ecc-assets.sh --agents a,b,c --skills x,y --rules common,web
+  sync-ecc-assets.sh --loop <name> [--backup]
+  sync-ecc-assets.sh --agents a,b,c --skills x,y --rules common,web [--backup]
   sync-ecc-assets.sh --list
+
+--backup ... ECC由来ファイルを上書きする前に .bak.TIMESTAMP を残す
 EOF
 }
 
@@ -45,6 +55,7 @@ while [[ $# -gt 0 ]]; do
     --skills) skills_csv="$2"; shift 2 ;;
     --rules) rules_csv="$2"; shift 2 ;;
     --list) list_only=1; shift ;;
+    --backup) do_backup=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) log_error "不明な引数: $1"; usage; exit 1 ;;
   esac
@@ -84,11 +95,60 @@ fi
 
 mkdir -p "$DEST_AGENTS" "$DEST_SKILLS" "$DEST_RULES"
 
+OLD_MANIFEST_TMP="$(mktemp)"
+NEW_MANIFEST_TMP="$(mktemp)"
+trap 'rm -f "$OLD_MANIFEST_TMP" "$NEW_MANIFEST_TMP"' EXIT
+
+if [[ -f "$MANIFEST" ]]; then
+  grep -v '^#' "$MANIFEST" | grep -v '^$' > "$OLD_MANIFEST_TMP" || true
+else
+  : > "$OLD_MANIFEST_TMP"
+fi
+
+manifest_has() {
+  local rel="$1" file="$2"
+  grep -qxF "$rel" "$file" 2>/dev/null
+}
+
+record_path() {
+  printf '%s\n' "$1" >> "$NEW_MANIFEST_TMP"
+}
+
+install_file() {
+  local src="$1"
+  local dest="$2"
+  local rel="$3"
+  mkdir -p "$(dirname "$dest")"
+  # マニフェストが既にあるときだけ「未登録=ユーザー資産」として保護する。
+  # 初回(マニフェスト無し)は既存ファイルを ECC 管理下として取り込み上書きする。
+  if [[ -f "$MANIFEST" && -e "$dest" ]] && ! manifest_has "$rel" "$OLD_MANIFEST_TMP"; then
+    log_warn "ユーザー資産のため上書きスキップ: ${rel}"
+    return 0
+  fi
+  if [[ -e "$dest" && "$do_backup" -eq 1 ]]; then
+    cp -a "$dest" "${dest}.bak.$(timestamp)"
+  fi
+  cp "$src" "$dest"
+  record_path "$rel"
+}
+
+install_tree() {
+  local src_dir="$1"
+  local rel_prefix="$2"
+  local f rel
+  while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    rel="${rel_prefix}/${f#"${src_dir}/"}"
+    install_file "$f" "${DEST_ROOT}/${rel}" "$rel"
+  done < <(find "$src_dir" -type f | LC_ALL=C sort)
+}
+
 copy_csv_items() {
   local csv="$1" kind="$2"
   [[ -z "$csv" ]] && return 0
   local old_ifs="$IFS"
   IFS=','
+  # shellcheck disable=SC2206
   local items=($csv)
   IFS="$old_ifs"
   local item
@@ -100,10 +160,10 @@ copy_csv_items() {
         local src_txt="${ECC_DIR}/.opencode/prompts/agents/${item}.txt"
         local src_md="${ECC_DIR}/agents/${item}.md"
         if [[ -f "$src_txt" ]]; then
-          cp "$src_txt" "${DEST_AGENTS}/${item}.txt"
+          install_file "$src_txt" "${DEST_AGENTS}/${item}.txt" "agents/${item}.txt"
           log_ok "agent取り込み: ${item}.txt"
         elif [[ -f "$src_md" ]]; then
-          cp "$src_md" "${DEST_AGENTS}/${item}.md"
+          install_file "$src_md" "${DEST_AGENTS}/${item}.md" "agents/${item}.md"
           log_warn "agent取り込み(OpenCode用.txtが無いためClaude Code形式.mdを使用): ${item}.md"
         else
           log_warn "agentが見つかりません(スキップ): ${item}"
@@ -113,7 +173,7 @@ copy_csv_items() {
         local src_dir="${ECC_DIR}/skills/${item}"
         if [[ -d "$src_dir" ]]; then
           mkdir -p "${DEST_SKILLS}/${item}"
-          cp -R "${src_dir}/." "${DEST_SKILLS}/${item}/"
+          install_tree "$src_dir" "skills/${item}"
           log_ok "skill取り込み: ${item}"
         else
           log_warn "skillが見つかりません(スキップ): ${item}"
@@ -123,7 +183,7 @@ copy_csv_items() {
         local src_dir="${ECC_DIR}/rules/${item}"
         if [[ -d "$src_dir" ]]; then
           mkdir -p "${DEST_RULES}/${item}"
-          cp -R "${src_dir}/." "${DEST_RULES}/${item}/"
+          install_tree "$src_dir" "rules/${item}"
           log_ok "rules取り込み: ${item}"
         else
           log_warn "rulesが見つかりません(スキップ): ${item}"
@@ -137,5 +197,27 @@ copy_csv_items "$agents_csv" agent
 copy_csv_items "$skills_csv" skill
 copy_csv_items "$rules_csv" rule
 
+# 旧にあって新に無い ECC 由来を削除
+while IFS= read -r rel || [[ -n "$rel" ]]; do
+  [[ -z "$rel" ]] && continue
+  if ! manifest_has "$rel" "$NEW_MANIFEST_TMP"; then
+    local_path="${DEST_ROOT}/${rel}"
+    if [[ -e "$local_path" ]]; then
+      log_info "不要になったECC由来を削除: ${rel}"
+      rm -f "$local_path"
+      rmdir "$(dirname "$local_path")" 2>/dev/null || true
+    fi
+  fi
+done < "$OLD_MANIFEST_TMP"
+
+{
+  echo "# ECC sync manifest — managed by setup/sync-ecc-assets.sh"
+  echo "# Do not edit manually. User files not listed here are preserved."
+  if [[ -s "$NEW_MANIFEST_TMP" ]]; then
+    sort -u "$NEW_MANIFEST_TMP"
+  fi
+} > "$MANIFEST"
+
 log_ok "ECC資材の取り込みが完了しました -> project-config/{agents,skills,rules}"
+log_info "マニフェスト: ${MANIFEST}"
 log_info "対象プロジェクトへ反映するには ./setup/init-target-project.sh を実行してください"

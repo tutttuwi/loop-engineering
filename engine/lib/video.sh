@@ -12,6 +12,7 @@
 #     --output output/xxx/report.mp4 [--min-duration 4]
 #
 # TTSエンジンは環境変数 LOOP_TTS_ENGINE (say|voicevox|openai|none) で切り替え可能。
+# 未設定時は resolve_tts_engine (say > voicevox起動中 > none)。
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./common.sh
@@ -99,7 +100,7 @@ for slide in "${slide_files[@]}"; do
   duration="$min_duration"
   have_audio=0
 
-  if [[ -s "$narration_txt" && "${LOOP_TTS_ENGINE:-say}" != "none" ]]; then
+  if [[ -s "$narration_txt" && "$(resolve_tts_engine)" != "none" ]]; then
     if "$SCRIPT_DIR/tts.sh" "$narration_txt" "$audio_file" 2>&2; then
       if [[ -s "$audio_file" ]] && command -v ffprobe >/dev/null 2>&1; then
         dur="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$audio_file" 2>/dev/null || echo "")"

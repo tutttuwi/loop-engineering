@@ -2,7 +2,7 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ステータス | `partial` |
+| ステータス | `done`（P1-4 マニフェスト保護実装済み） |
 | 関連実装 | `setup/sync-ecc-assets.sh`, `loops/*/loop.yaml` (`ecc_agents` / `ecc_skills` / `ecc_rules`) |
 | ロードマップ | P1-4 |
 

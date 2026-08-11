@@ -28,6 +28,7 @@ mcp_choice=""          # unset → both
 with_playwright=""     # unset → 1
 with_serena=""         # unset → 1
 with_lsp=""            # unset → 1
+mcp_permission_cli=""
 
 usage() {
   cat >&2 <<EOF
@@ -40,6 +41,7 @@ Options:
   --model-name <表示名>      表示名
   --config-path <path>       更新する opencode.json (既定: ${config_target})
   --mcp <choice>             Issue投稿用MCP: github | gitlab | both | none (既定: both)
+  --mcp-permission <mode>    ask|allow|deny (既定: ask。無人時は allow)
   --with-playwright          Playwright MCP を登録する(既定)
   --without-playwright       Playwright MCP を登録しない
   --with-serena              Serena MCP を登録する(既定・要 uvx)
@@ -101,6 +103,7 @@ while [[ $# -gt 0 ]]; do
     --without-serena) with_serena=0; shift ;;
     --with-lsp) with_lsp=1; shift ;;
     --without-lsp) with_lsp=0; shift ;;
+    --mcp-permission) mcp_permission_cli="$2"; shift 2 ;;
     --yes|-y) assume_yes=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) log_error "不明な引数: $1"; usage; exit 1 ;;
@@ -323,6 +326,7 @@ LOOP_ENABLE_GITLAB="$enable_gitlab" \
 LOOP_ENABLE_PLAYWRIGHT="$with_playwright" \
 LOOP_ENABLE_SERENA="$with_serena" \
 LOOP_ENABLE_LSP="$with_lsp" \
+LOOP_MCP_PERMISSION="$(resolve_mcp_permission "$mcp_permission_cli" "")" \
 LOOP_SETUP_LIB="${SCRIPT_DIR}/lib" \
 python3 - <<'PYEOF'
 import json
@@ -341,6 +345,7 @@ enable_gitlab = os.environ.get("LOOP_ENABLE_GITLAB", "0") == "1"
 enable_playwright = os.environ.get("LOOP_ENABLE_PLAYWRIGHT", "0") == "1"
 enable_serena = os.environ.get("LOOP_ENABLE_SERENA", "0") == "1"
 enable_lsp = os.environ.get("LOOP_ENABLE_LSP", "0") == "1"
+mcp_permission = os.environ.get("LOOP_MCP_PERMISSION", "ask")
 
 config = {}
 if os.path.exists(target):
@@ -372,6 +377,8 @@ apply_mcp_servers(
     playwright=enable_playwright,
     serena=enable_serena,
     lsp=enable_lsp,
+    mcp_permission=mcp_permission,
+    force_mcp_permission=True,
 )
 
 with open(target, "w", encoding="utf-8") as f:
@@ -386,7 +393,7 @@ label = mcp_selection_label(
     lsp=enable_lsp,
 )
 print(
-    f"[OK] {target} を更新しました (model=lmstudio/{model_id}, features={label})",
+    f"[OK] {target} を更新しました (model=lmstudio/{model_id}, features={label}, mcp_permission={mcp_permission})",
     flush=True,
 )
 PYEOF

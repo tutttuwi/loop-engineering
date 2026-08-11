@@ -218,7 +218,8 @@ cp project-config/target.yaml.example project-config/target.yaml
 - `project-config/target.yaml` の `target_path` 等を更新
 
 既存の `opencode.json` がある場合は `.bak.<timestamp>` にバックアップします。  
-個別にオフにする場合: `--without-github` / `--without-gitlab` / `--without-playwright` / `--without-serena` / `--without-lsp`
+個別にオフにする場合: `--without-github` / `--without-gitlab` / `--without-playwright` / `--without-serena` / `--without-lsp`  
+無人ループ向け: `--mcp-permission allow`（既定は `ask`。詳細は [features/permissions-unattended.md](./features/permissions-unattended.md)）
 
 ### Issue 投稿用トークン
 
@@ -249,6 +250,13 @@ cp project-config/target.yaml.example project-config/target.yaml
 ./engine/run-loop.sh --loop yabaiyo --max-iterations 20
 ./engine/run-loop.sh --loop pr-review --model lmstudio/qwen3-coder-30b
 ./engine/run-loop.sh --loop monkey-test --extra "--tasks --no-commit"
+./engine/run-loop.sh --loop yabaiyo --post-report   # Marp/動画のホスト側保険
+```
+
+無人実行では init 時に MCP permission を allow にしてください（詳細は [features/permissions-unattended.md](./features/permissions-unattended.md)）:
+
+```bash
+./setup/init-target-project.sh --mcp-permission allow
 ```
 
 実行中は対象プロジェクトのカレントで Ralph がループします。別ターミナルから:
@@ -262,6 +270,39 @@ bun .../ralph.ts --add-context "まずはログイン画面の二重送信から
 
 ---
 
+## 運用ショートカット（セットアップ後）
+
+初回セットアップ完了後の定番操作。詳細は [features/](./features/README.md) を参照。
+
+| やりたいこと | コマンド | 詳細 |
+| --- | --- | --- |
+| 一発更新（sync→init→doctor） | `./setup/update.sh --loop <name>` | [porting-and-update.md](./features/porting-and-update.md) |
+| 無人 MCP permission | `init` / `update.sh` に `--mcp-permission allow` | [permissions-unattended.md](./features/permissions-unattended.md) |
+| レポート/動画の保険 | `run-loop.sh --post-report` | [report-video-pipeline.md](./features/report-video-pipeline.md) |
+| 成果物の一覧・掃除 | `./engine/list-runs.sh` / `./engine/clean-runs.sh` | [artifact-lifecycle.md](./features/artifact-lifecycle.md) |
+| エンジン smoke | `./tests/smoke.sh` | yaml_get / render-prompt / dry-run 等 |
+
+```bash
+./setup/update.sh --loop yabaiyo --mcp-permission allow --dry-run-loop yabaiyo
+./engine/list-runs.sh --loop yabaiyo
+./engine/clean-runs.sh --loop yabaiyo --keep 5 --dry-run
+./tests/smoke.sh
+```
+
+### レポート / TTS の環境変数
+
+| 変数 | 既定 | メモ |
+| --- | --- | --- |
+| `LOOP_MARP_VERSION` | `@marp-team/marp-cli@latest` | 再現性のためピン推奨: `@marp-team/marp-cli@4.5.0`（major 固定なら `@marp-team/marp-cli@4`） |
+| `LOOP_TTS_ENGINE` | 自動（`say` → VOICEVOX 起動中 → `none`） | 明示: `say` / `voicevox` / `openai` / `none` |
+
+```bash
+export LOOP_MARP_VERSION=@marp-team/marp-cli@4.5.0
+export LOOP_TTS_ENGINE=none   # Linux で無音にする場合など
+```
+
+---
+
 ## トラブルシュート
 
 | 症状 | 対処 |
@@ -270,7 +311,8 @@ bun .../ralph.ts --add-context "まずはログイン画面の二重送信から
 | `ProviderModelNotFoundError` | 対象の `.opencode/opencode.json` に `lmstudio` があるか確認。なければ `init-target-project.sh` を再実行。グローバルを使う場合のみ `configure-opencode.sh` |
 | LM Studio に繋がらない | モデルロードと Local Server 起動を確認。`curl .../v1/models` |
 | Playwright が動かない | `init-target-project.sh` 実行済みか、対象の `opencode.json` に `mcp.playwright` があるか確認 |
-| 動画生成失敗 | `brew install ffmpeg`。TTSは `LOOP_TTS_ENGINE=none` で無音動画にもできる |
+| 動画生成失敗 | `brew install ffmpeg`。TTSは `LOOP_TTS_ENGINE=none` で無音動画にもできる。Linux で `say` が無い場合、未設定なら既定は `none`（VOICEVOX 起動中なら `voicevox`） |
+| Marp が毎回違う / オフライン失敗 | `export LOOP_MARP_VERSION=@marp-team/marp-cli@4.5.0` でピン留め |
 | Issue が作れない | `GITHUB_TOKEN` / `GITLAB_TOKEN` と MCP 設定を確認 |
 
 診断の再実行:
@@ -287,8 +329,10 @@ bun .../ralph.ts --add-context "まずはログイン画面の二重送信から
 | --- | --- | --- |
 | `setup/install.sh` | 初回の一括入口 | 最初の1回 |
 | `setup/bootstrap-submodules.sh` | submodule のみ | clone直後・更新時 |
+| `setup/update.sh` | pull→sync→init→doctor のワンショット | 基盤更新・資材再同期時 |
 | `setup/doctor.sh` | 依存診断 | いつでも |
 | `setup/configure-opencode.sh` | **任意:** グローバル `~/.config/opencode/opencode.json` | マシン全体で OpenCode を使うとき |
 | `setup/sync-ecc-assets.sh` | ECC → project-config | ループ追加・資材更新時 |
-| `setup/init-target-project.sh` | **ループ必須:** 対象PJへ opencode/MCP 設定 | 対象PJ変更時 |
+| `setup/init-target-project.sh` | **ループ必須:** 対象PJへ opencode/MCP 設定 | 対象PJ変更時（`--mcp-permission allow` で無人向け） |
 | `setup/new-loop.sh` | `_template` から新ループ作成 | アイデア追加時 |
+| `engine/list-runs.sh` / `clean-runs.sh` | 成果物の一覧・掃除 | 運用中 |

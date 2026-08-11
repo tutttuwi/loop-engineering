@@ -8,8 +8,9 @@
 # 使い方:
 #   engine/run-loop.sh --loop monkey-test --target /path/to/target-project
 #   engine/run-loop.sh --loop yabaiyo     --target-config ./my-target.yaml
+#   engine/run-loop.sh --loop yabaiyo     --target-name app-a
 #   engine/run-loop.sh --loop pr-review   --target /path/to/repo --extra "--model lmstudio/qwen3-coder-30b"
-#   engine/run-loop.sh --status                       # 実行中ループの状態確認(対象プロジェクト側で実行)
+#   engine/run-loop.sh --status                       # 実行中ループの状態確認
 #   engine/run-loop.sh --loop monkey-test --dry-run    # プロンプトを生成して表示するだけ
 #
 set -euo pipefail
@@ -24,20 +25,27 @@ usage() {
   cat >&2 <<EOF
 Usage:
   run-loop.sh --loop <name> [options]
+  run-loop.sh --status [options]
 
-必須:
+必須(--status 以外):
   --loop <name>            loops/<name>/ ディレクトリのループを実行する
 
 主なオプション:
   --target <path>          対象プロジェクトの絶対/相対パス(project-config/target.yamlのtarget_pathを上書き)
   --target-config <path>   使用するtarget.yamlのパス(既定: project-config/target.yaml)
+  --target-name <name>     project-config/targets/<name>.yaml を使う(--target-config と排他)
   --max-iterations <N>     最大イテレーション数(既定: loop.yamlの値)
   --min-iterations <N>     最小イテレーション数(既定: loop.yamlの値)
   --model <provider/model> 使用モデル(既定: opencode.jsonのデフォルトモデル = ローカルLLM)
   --issue-tracker <t>      github | gitlab (既定: target.yamlの値)
   --issue-post-mode <m>    create(毎回新規Issue) | update(既存Issueへ追記) (既定: target.yaml)
   --issue-target <id|url>  update時の既存Issue番号またはURL (既定: target.yaml)
+  --issue-fallback <mode>  none|cli (欠落時に gh/glab で投稿。既定: none)
+  --skip-issue-gate        issue-url.txt 検証をスキップする
+  --post-report            Ralph成功後に report.md があれば PDF/動画を生成
+  --post-report-always     Ralph失敗時もポスト処理を試みる(--post-report 含意)
   --dry-run                レンダリング後のプロンプトを表示するだけで実行しない
+  --status                 対象プロジェクト上の Ralph 状態を表示する(--loop 不要)
   --extra "<args>"         ralph CLIにそのまま追加で渡す引数
   -h, --help               このヘルプを表示
 
@@ -45,16 +53,40 @@ Usage:
 EOF
 }
 
+# --- 対象パス解決(status / 通常実行で共用) ---------------------------------
+resolve_target_path() {
+  local target_config_arg="$1"
+  local target_override_arg="$2"
+  local registry_name_arg="${3:-}"
+  local target_yaml_path
+  target_yaml_path="$(resolve_target_config "$target_config_arg" "$registry_name_arg")" || exit 1
+  require_target_config_file "$target_yaml_path" "$registry_name_arg" || exit 1
+  local path
+  path="${target_override_arg:-$(yaml_get "$target_yaml_path" "target_path" "")}"
+  if [[ -z "$path" ]]; then
+    log_error "target_path が未設定です(--target または target.yaml の target_path)"
+    exit 1
+  fi
+  path="$(cd "$path" 2>/dev/null && pwd || { log_error "対象プロジェクトのパスが存在しません: ${path}"; exit 1; })"
+  printf '%s\t%s' "$path" "$target_yaml_path"
+}
+
 loop_name=""
 target_override=""
 target_config=""
+target_registry_name=""
 max_iterations_override=""
 min_iterations_override=""
 model_override=""
 issue_tracker_override=""
 issue_post_mode_override=""
 issue_target_override=""
+issue_fallback="none"
+skip_issue_gate=0
 dry_run=0
+status_only=0
+post_report=0
+post_report_always=0
 extra_args=""
 
 while [[ $# -gt 0 ]]; do
@@ -62,21 +94,52 @@ while [[ $# -gt 0 ]]; do
     --loop) loop_name="$2"; shift 2 ;;
     --target) target_override="$2"; shift 2 ;;
     --target-config) target_config="$2"; shift 2 ;;
+    --target-name) target_registry_name="$2"; shift 2 ;;
     --max-iterations) max_iterations_override="$2"; shift 2 ;;
     --min-iterations) min_iterations_override="$2"; shift 2 ;;
     --model) model_override="$2"; shift 2 ;;
     --issue-tracker) issue_tracker_override="$2"; shift 2 ;;
     --issue-post-mode) issue_post_mode_override="$2"; shift 2 ;;
     --issue-target) issue_target_override="$2"; shift 2 ;;
+    --issue-fallback)
+      issue_fallback="$2"
+      case "$issue_fallback" in
+        none|cli) ;;
+        *) log_error "--issue-fallback は none|cli です"; exit 1 ;;
+      esac
+      shift 2
+      ;;
+    --skip-issue-gate) skip_issue_gate=1; shift ;;
+    --post-report) post_report=1; shift ;;
+    --post-report-always) post_report=1; post_report_always=1; shift ;;
     --dry-run) dry_run=1; shift ;;
+    --status) status_only=1; shift ;;
     --extra) extra_args="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) log_error "不明な引数: $1"; usage; exit 1 ;;
   esac
 done
 
+# --- --status --------------------------------------------------------------
+if [[ "$status_only" -eq 1 ]]; then
+  require_cmd bun "https://bun.sh/ からインストールしてください"
+  [[ -f "$RALPH_ENTRY" ]] || {
+    log_error "ralph.ts が見つかりません: ${RALPH_ENTRY}"
+    log_error "submoduleが初期化されていない可能性があります: ./setup/bootstrap-submodules.sh を実行してください"
+    exit 1
+  }
+  resolved="$(resolve_target_path "$target_config" "$target_override" "$target_registry_name")"
+  target_path="${resolved%%$'\t'*}"
+  log_info "Ralph --status (cwd=${target_path})"
+  (
+    cd "$target_path"
+    bun "$RALPH_ENTRY" --status
+  )
+  exit $?
+fi
+
 if [[ -z "$loop_name" ]]; then
-  log_error "--loop <name> は必須です"
+  log_error "--loop <name> は必須です(--status 以外)"
   usage
   exit 1
 fi
@@ -91,24 +154,18 @@ fi
 loop_yaml="${loop_dir}/loop.yaml"
 prompt_template="${loop_dir}/$(yaml_get "$loop_yaml" "prompt_file" "prompt.md")"
 
-target_yaml="$(resolve_target_config "$target_config")"
-if [[ ! -f "$target_yaml" ]]; then
-  log_error "target.yaml が見つかりません: ${target_yaml}"
-  log_error "project-config/target.yaml.example をコピーして作成してください:"
-  log_error "  cp project-config/target.yaml.example project-config/target.yaml"
-  exit 1
-fi
+resolved="$(resolve_target_path "$target_config" "$target_override" "$target_registry_name")"
+target_path="${resolved%%$'\t'*}"
+target_yaml="${resolved#*$'\t'}"
 
 # --- 各種パラメータ解決 ----------------------------------------------------
-target_path="${target_override:-$(yaml_get "$target_yaml" "target_path" "")}"
-if [[ -z "$target_path" ]]; then
-  log_error "target_path が未設定です(--target または target.yaml の target_path)"
-  exit 1
-fi
-target_path="$(cd "$target_path" 2>/dev/null && pwd || { log_error "対象プロジェクトのパスが存在しません: ${target_path}"; exit 1; })"
-
 target_name="$(yaml_get "$target_yaml" "target_name" "$(basename "$target_path")")"
 repo_provider="${issue_tracker_override:-$(yaml_get "$target_yaml" "repo_provider" "github")}"
+# both → CLIフォールバックでは github を優先
+issue_cli_provider="$repo_provider"
+case "$issue_cli_provider" in
+  both) issue_cli_provider="github" ;;
+esac
 repo_url="$(yaml_get "$target_yaml" "repo_url" "")"
 default_branch="$(yaml_get "$target_yaml" "default_branch" "main")"
 
@@ -116,18 +173,30 @@ max_iterations="${max_iterations_override:-$(yaml_get "$loop_yaml" "max_iteratio
 min_iterations="${min_iterations_override:-$(yaml_get "$loop_yaml" "min_iterations" "1")}"
 completion_promise="$(yaml_get "$loop_yaml" "completion_promise" "COMPLETE")"
 agent="$(yaml_get "$loop_yaml" "agent" "opencode")"
+require_issue="$(yaml_get "$loop_yaml" "require_issue" "true")"
+seed_files_csv="$(yaml_get "$loop_yaml" "seed_files" "")"
 
 run_id="$(timestamp)"
 
 # 成果物・レポート生成スクリプトは対象PJ内に置く。
-# (cwd=対象PJ の OpenCode が基盤リポジトリ側パスを external_directory として拒否するため)
 ensure_loop_engineering_gitignore "$target_path"
 stage_engine_lib_into_target "$target_path"
 runtime_root="${target_path}/.loop-engineering"
 output_dir="${runtime_root}/output/${loop_name}/${run_id}"
 mkdir -p "$output_dir"
 
-# report-template も対象PJ内へコピー(エージェントの Read が境界内で完結するように)
+# 進捗ファイルのシード(初回 Read の File not found を減らす)
+if [[ -n "$seed_files_csv" ]]; then
+  while IFS= read -r seed; do
+    [[ -n "$seed" ]] || continue
+    seed_path="${output_dir}/${seed}"
+    if [[ ! -f "$seed_path" ]]; then
+      printf '# %s\n\n(初回シード。エージェントが追記・更新してください)\n' "$seed" > "$seed_path"
+    fi
+  done < <(printf '%s\n' "$seed_files_csv" | tr ',' '\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | grep -v '^$')
+fi
+
+# report-template も対象PJ内へコピー
 report_template_src="${loop_dir}/report-template.md"
 report_template_dst="${output_dir}/report-template.md"
 if [[ -f "$report_template_src" ]]; then
@@ -144,12 +213,10 @@ export DEFAULT_BRANCH="$default_branch"
 export RUN_ID="$run_id"
 export RUN_DATE="$(date +"%Y-%m-%d %H:%M:%S")"
 export OUTPUT_DIR="$output_dir"
-# ENGINE_ROOT は基盤リポジトリではなく、対象PJ内にステージしたランタイムルート
 export ENGINE_ROOT="$runtime_root"
 export COMPLETION_PROMISE="$completion_promise"
 export REPORT_TEMPLATE_PATH="$report_template_dst"
 
-# ループ固有でよく使う項目(該当しないループでは空文字列のままでよい)
 export MONKEY_TEST_TARGET_URL="$(yaml_get "$target_yaml" "monkey_test_target_url" "")"
 export PR_REVIEW_TARGET="$(yaml_get "$target_yaml" "pr_review_target" "")"
 
@@ -172,15 +239,15 @@ fi
 export ISSUE_POST_MODE="$issue_post_mode"
 export ISSUE_TARGET="$issue_target"
 
-# プロンプトに埋め込む具体的な指示文(モード別に分岐・プレースホルダはここで展開済みにする)
 if [[ "$issue_post_mode" == "create" ]]; then
   export ISSUE_POST_INSTRUCTIONS="$(cat <<EOF
 ### Issue投稿モード: create(毎回新規チケットを払い出す)
 
 1. ${repo_provider} のMCPツールを使い、\`${repo_url}\` に**新しいIssueを1件作成**する
 2. タイトル・本文にはこのループの要約と成果物への参照を含める
-3. 作成されたIssueの番号とURLを \`${output_dir}/issue-url.txt\` に1行で保存する
+3. 作成に**成功したときだけ**、Issueの番号とURLを \`${output_dir}/issue-url.txt\` に1行で保存する
    (例: https://github.com/org/repo/issues/123 )
+   投稿に失敗した場合は issue-url.txt を書かないこと(ホスト側が検証する)
 4. 同じループ実行内で既に \`issue-url.txt\` がある場合は新規作成せず、そのIssueへ追記する
 EOF
 )"
@@ -191,7 +258,8 @@ else
 1. 既存Issue \`${issue_target}\` を対象にする(番号またはURL)
 2. ${repo_provider} のMCPツールで、そのIssueに**コメントを追記**する(本文を上書きしない)
 3. コメントにはこのループ実行(RUN_ID: ${run_id})の要約と成果物への参照を含める
-4. 実際に書き込んだIssueのURLを \`${output_dir}/issue-url.txt\` に保存する
+4. 追記に**成功したときだけ**、実際に書き込んだIssueのURLを \`${output_dir}/issue-url.txt\` に保存する
+   失敗時は issue-url.txt を書かないこと(ホスト側が検証する)
 EOF
 )"
 fi
@@ -203,6 +271,7 @@ log_info "ループ            : ${loop_name}"
 log_info "対象プロジェクト  : ${target_path} (${target_name})"
 log_info "Issue投稿先種別   : ${repo_provider}"
 log_info "Issue投稿モード   : ${issue_post_mode}$([[ -n "$issue_target" ]] && echo " (target=${issue_target})" || true)"
+log_info "Issue完了ゲート   : require_issue=${require_issue} fallback=${issue_fallback} skip=${skip_issue_gate}"
 log_info "最大/最小イテレーション: ${max_iterations} / ${min_iterations}"
 log_info "完了promise       : ${completion_promise}"
 log_info "生成プロンプト    : ${rendered_prompt}"
@@ -240,10 +309,98 @@ if [[ -n "$extra_args" ]]; then
 fi
 
 log_info "実行コマンド: ${ralph_cmd[*]} (cwd=${target_path})"
+ralph_rc=0
 (
   cd "$target_path"
   "${ralph_cmd[@]}"
-)
+) || ralph_rc=$?
+
+# latest シンボリックリンク(成功時)
+loop_out_root="${runtime_root}/output/${loop_name}"
+if [[ "$ralph_rc" -eq 0 ]]; then
+  ln -sfn "$run_id" "${loop_out_root}/latest" 2>/dev/null || true
+fi
+
+# --- ポストレポート --------------------------------------------------------
+post_rc=0
+if [[ "$post_report" -eq 1 ]]; then
+  if [[ "$ralph_rc" -eq 0 || "$post_report_always" -eq 1 ]]; then
+    post_rc=0
+    bash "${SCRIPT_DIR}/lib/post-report.sh" "$output_dir" "$runtime_root" || post_rc=$?
+    if [[ "$post_rc" -ne 0 ]]; then
+      log_warn "ポスト処理が失敗しました (exit=${post_rc})"
+    fi
+  else
+    log_warn "Ralph が失敗したためポスト処理をスキップ (--post-report-always で強制可)"
+  fi
+fi
+
+# --- Issue 完了ゲート(Ralph 成功時のみ) ------------------------------------
+if [[ "$ralph_rc" -ne 0 ]]; then
+  log_error "Ralph ループが失敗しました (exit=${ralph_rc})"
+  exit "$ralph_rc"
+fi
+
+require_issue_norm="$(printf '%s' "$require_issue" | tr '[:upper:]' '[:lower:]')"
+require_issue_re='^(1|true|yes|on)$'
+if [[ "$skip_issue_gate" -eq 0 && "$require_issue_norm" =~ $require_issue_re ]]; then
+  issue_file="${output_dir}/issue-url.txt"
+  if ! verify_issue_url_file "$issue_file"; then
+    if [[ "$issue_fallback" == "cli" ]]; then
+      log_warn "Issue URL が無いため CLI フォールバックを試みます"
+      body_file="${output_dir}/.issue-body.md"
+      {
+        echo "# ${loop_name} ループ結果 (${run_id})"
+        echo ""
+        echo "対象: ${target_name} (\`${target_path}\`)"
+        echo ""
+        if [[ -f "${output_dir}/findings.md" ]]; then
+          echo "## findings.md"
+          echo ""
+          cat "${output_dir}/findings.md"
+        elif [[ -f "${output_dir}/review-notes.md" ]]; then
+          echo "## review-notes.md"
+          echo ""
+          cat "${output_dir}/review-notes.md"
+        else
+          echo "(自動生成) エージェントが issue-url.txt を残さなかったためホスト側で投稿しました。"
+          echo "詳細は \`${output_dir}\` を参照してください。"
+        fi
+      } > "$body_file"
+
+      if [[ "$issue_post_mode" == "update" ]]; then
+        "${SCRIPT_DIR}/lib/issue.sh" comment \
+          --provider "$issue_cli_provider" \
+          --issue "$issue_target" \
+          --repo-url "$repo_url" \
+          --body-file "$body_file" \
+          --output "$issue_file"
+      else
+        [[ -n "$repo_url" ]] || {
+          log_error "CLI フォールバックには target.yaml の repo_url が必要です"
+          exit 1
+        }
+        "${SCRIPT_DIR}/lib/issue.sh" create \
+          --provider "$issue_cli_provider" \
+          --repo-url "$repo_url" \
+          --title "[${loop_name}] ${target_name} (${run_id})" \
+          --body-file "$body_file" \
+          --output "$issue_file"
+      fi
+      verify_issue_url_file "$issue_file" || exit 1
+    else
+      log_error "Issue 完了ゲートに失敗しました"
+      log_error "  対処: エージェントに Issue 投稿を完了させる、または"
+      log_error "        --issue-fallback cli で gh/glab 投稿、--skip-issue-gate で検証スキップ"
+      exit 1
+    fi
+  fi
+fi
+
+if [[ "$post_rc" -ne 0 ]]; then
+  log_error "ループは完了しましたがポスト処理に失敗しました (exit=${post_rc})"
+  exit "$post_rc"
+fi
 
 log_ok "ループ実行が完了しました。出力: ${output_dir}"
 log_info "レポートのスライド化・動画化: ${runtime_root}/engine/lib/report.sh / video.sh"

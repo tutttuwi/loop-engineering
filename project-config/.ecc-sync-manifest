@@ -1,0 +1,18 @@
+# ECC sync manifest — managed by setup/sync-ecc-assets.sh
+# Do not edit manually. User files not listed here are preserved.
+agents/architect.txt
+agents/code-reviewer.txt
+agents/security-reviewer.txt
+rules/common/agents.md
+rules/common/code-review.md
+rules/common/coding-style.md
+rules/common/development-workflow.md
+rules/common/git-workflow.md
+rules/common/hooks.md
+rules/common/patterns.md
+rules/common/performance.md
+rules/common/security.md
+rules/common/testing.md
+skills/agentic-engineering/SKILL.md
+skills/architecture-decision-records/SKILL.md
+skills/production-audit/SKILL.md

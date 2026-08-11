@@ -43,9 +43,10 @@
 - MCP / lsp（`apply_mcp_servers`）
 - `permission.mcp_*` 既定 `ask`
 
-### 既知のデッドコード
+### 参考テンプレ（未使用）
 
-`engine/opencode/opencode.json.tmpl` は現行フローで未使用。削除か「参考テンプレ」と明記する（P2-5）。
+`engine/opencode/opencode.json.tmpl` は現行フローでは未使用。init は Python ビルダー（上記）が生成する。  
+詳細は [engine/opencode/README.md](../../engine/opencode/README.md)（P2-5 対応済み）。
 
 ## 受け入れ条件（現状維持）
 

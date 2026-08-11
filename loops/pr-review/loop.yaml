@@ -6,6 +6,9 @@ max_iterations: 8
 min_iterations: 1
 completion_promise: PR_REVIEW_COMPLETE
 
+require_issue: true
+seed_files: review-notes.md
+
 prompt_file: prompt.md
 report_template: report-template.md
 

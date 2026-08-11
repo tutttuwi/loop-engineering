@@ -2,7 +2,7 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ステータス | `planned` |
+| ステータス | `done`（P0-1 実装済み） |
 | 関連実装 | `setup/lib/opencode_mcp_servers.py`（現状 `permission.mcp_* = ask` 固定） |
 | ロードマップ | P0-1 |
 
