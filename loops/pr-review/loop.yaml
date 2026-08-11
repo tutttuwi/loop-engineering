@@ -1,0 +1,15 @@
+name: pr-review
+description: 特定のMR/PRの内容を読み解きレビューを実施するループ
+
+agent: opencode
+max_iterations: 8
+min_iterations: 1
+completion_promise: PR_REVIEW_COMPLETE
+
+prompt_file: prompt.md
+report_template: report-template.md
+
+# vendor/ecc から取り込む資材 (setup/sync-ecc-assets.sh --loop pr-review)
+ecc_agents: code-reviewer,security-reviewer
+ecc_skills: architecture-decision-records
+ecc_rules: common

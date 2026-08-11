@@ -1,0 +1,15 @@
+name: monkey-test
+description: フロントエンド/モバイルアプリの画面構成を把握したうえで、Playwrightによる例外操作を繰り返し検証するモンキーテストループ
+
+agent: opencode
+max_iterations: 25
+min_iterations: 3
+completion_promise: MONKEY_TEST_COMPLETE
+
+prompt_file: prompt.md
+report_template: report-template.md
+
+# vendor/ecc から取り込む資材 (setup/sync-ecc-assets.sh --loop monkey-test)
+ecc_agents: e2e-runner,architect
+ecc_skills: e2e-testing,frontend-patterns,browser-qa
+ecc_rules: common,web

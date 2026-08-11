@@ -1,0 +1,32 @@
+# project-config/target.yaml
+#
+# ループを実行する「対象プロジェクト」を指定する設定ファイル。
+# このファイル自体は .gitignore 対象(環境依存のローカルパスを含むため)。
+# 他プロジェクトへ本基盤を移植する際は、このファイルだけ書き換えれば良い設計になっている。
+#
+# 使い方: このファイルを project-config/target.yaml としてコピーし、値を編集する
+#   cp project-config/target.yaml.example project-config/target.yaml
+#
+# 制約: このツールキットの設定ファイルは「ネストなし・リストなしのフラットな key: value」のみ
+#       サポートする(engine/lib/common.sh の簡易YAMLリーダーの制約)。
+
+# 対象プロジェクトのローカル絶対パス(または相対パス)
+target_path: /path/to/your/target-project
+
+# レポートや通知に表示する対象プロジェクトの名前
+target_name: your-project-name
+
+# Issue投稿先の種別: github | gitlab
+repo_provider: github
+
+# Issue投稿先リポジトリのURL (例: https://github.com/your-org/your-repo)
+repo_url: https://github.com/your-org/your-repo
+
+# 対象プロジェクトの既定ブランチ
+default_branch: main
+
+# モンキーテストループで操作する対象URL(フロントエンド/モバイルアプリのプレビューURL等)
+monkey_test_target_url: http://localhost:3000
+
+# PR/MRレビューループで対象にするPR/MRの番号またはURL
+pr_review_target: https://github.com/your-org/your-repo/pull/123

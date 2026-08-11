@@ -1,0 +1,32 @@
+# loops/_template/loop.yaml
+#
+# 新しいループを追加するときは、このディレクトリを loops/<新しいループ名>/ として
+# まるごとコピーし、このファイルと prompt.md / report-template.md / README.md を編集してください。
+#
+# 制約: フラットな key: value のみサポート(engine/lib/common.sh の簡易YAMLリーダーの制約)。
+#       リストを表現したい場合はカンマ区切りの1行文字列にすること(例: a,b,c)。
+
+name: _template
+description: 新規ループ追加用のひな形(このままでは実行できません)
+
+# ralphに渡すエージェント種別。基本的に opencode 固定でよい。
+agent: opencode
+
+# デフォルトのイテレーション数(engine/run-loop.sh の --max-iterations / --min-iterations で上書き可)
+max_iterations: 15
+min_iterations: 1
+
+# このタグが出力に含まれるとループを終了する
+completion_promise: TEMPLATE_COMPLETE
+
+# このディレクトリ内のファイル名(相対パス)
+prompt_file: prompt.md
+report_template: report-template.md
+
+# setup/sync-ecc-assets.sh --loop <name> で ECC (vendor/ecc) から取り込む資材(カンマ区切り、任意)
+#   ecc_agents: vendor/ecc/.opencode/prompts/agents/<name>.txt を取り込む
+#   ecc_skills: vendor/ecc/skills/<name>/ を取り込む
+#   ecc_rules : vendor/ecc/rules/<name>/  を取り込む
+ecc_agents: architect
+ecc_skills: autonomous-loops
+ecc_rules: common

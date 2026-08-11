@@ -1,0 +1,15 @@
+name: yabaiyo
+description: ソースコードを読み解き、設計・実装上の不備をひたすら収集して報告する「ヤバイヨループ」
+
+agent: opencode
+max_iterations: 25
+min_iterations: 3
+completion_promise: YABAIYO_COMPLETE
+
+prompt_file: prompt.md
+report_template: report-template.md
+
+# vendor/ecc から取り込む資材 (setup/sync-ecc-assets.sh --loop yabaiyo)
+ecc_agents: architect,code-reviewer,security-reviewer
+ecc_skills: architecture-decision-records,production-audit,agentic-engineering
+ecc_rules: common
