@@ -2,7 +2,7 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ステータス | `done`（permission 拡張は planned → [permissions-unattended.md](./permissions-unattended.md)） |
+| ステータス | `done`（permission プロファイル含む → [permissions-unattended.md](./permissions-unattended.md)） |
 | 関連実装 | `setup/init-target-project.sh`, `setup/configure-opencode.sh`, `setup/lib/build_target_opencode_config.py`, `setup/lib/opencode_mcp_servers.py` |
 
 ## 要件定義（維持）
@@ -13,6 +13,7 @@
 4. MCP（github / gitlab / playwright / serena）と `lsp: true` を登録できる（opt-out 可）
 5. `project-config/{agents,skills,rules}` を対象の `.opencode/loop-engineering/` にコピーし、opencode.json から参照する
 6. 既存 opencode.json がある場合はバックアップしてから更新する
+7. MCP permission を `ask` / `allow` / `deny` で選べる（CLI / 環境変数 / target.yaml）
 
 ## 設計（現状）
 
@@ -41,7 +42,8 @@
 - `instructions`（rules 配下 md）
 - `agent`（subagent、write/edit は false）
 - MCP / lsp（`apply_mcp_servers`）
-- `permission.mcp_*` 既定 `ask`
+- `permission.mcp_*`（既定 `ask`。`--mcp-permission allow` 等で変更）
+- 任意で `permission.<server>_*`（`--mcp-permission-overrides github=allow,...`）
 
 ### 参考テンプレ（未使用）
 
@@ -53,3 +55,5 @@
 - [x] init 後に対象で `opencode` が LM Studio モデルを選べる
 - [x] MCP を `--without-*` で選べる
 - [x] Serena 起動時にブラウザダッシュボードを開かない
+- [x] `--mcp-permission` で `permission.mcp_*` を切替できる
+- [x] `--mcp-permission-overrides` でサーバ別 `permission.<server>_*` を付与できる

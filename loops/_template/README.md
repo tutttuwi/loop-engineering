@@ -10,7 +10,8 @@
    cp -R loops/_template loops/my-new-loop
    ```
 
-2. `loop.yaml` を編集する(名前、完了promise、イテレーション数、ECCから取り込む資材)
+2. `loop.yaml` を編集する(名前、完了promise、イテレーション数、`seed_files`、ECCから取り込む資材)
+   - `seed_files`: OUTPUT_DIR 直下にホストが初回スタブを作る進捗ファイル(カンマ区切り)。既存は上書きしない
 3. `prompt.md` を編集する(`{{VAR}}` プレースホルダーは `engine/run-loop.sh` が自動展開する)
 4. `report-template.md` を編集する(生成させたいスライド構成の指針)
 5. 必要なら `./setup/sync-ecc-assets.sh --loop my-new-loop` でECCから資材を取り込む

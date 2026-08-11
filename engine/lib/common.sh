@@ -189,7 +189,113 @@ stage_engine_lib_into_target() {
   chmod +x "${dest_lib}/report.sh" "${dest_lib}/video.sh" "${dest_lib}/tts.sh" 2>/dev/null || true
 }
 
-# issue-url.txt が非空で URL らしいか検証する。成功で 0。
+# --- 進捗シード (seed_files) -----------------------------------------------
+# loop.yaml の seed_files (カンマ区切り・OUTPUT_DIR 直下のファイル名のみ) に従い、
+# 未存在の進捗ファイルへ初回スタブを書く。既存ファイルは上書きしない。
+# 初回イテレーションの Read "File not found" ノイズを減らすためのホスト側契約。
+#
+# 使い方: ensure_seed_files <output_dir> <seed_files_csv>
+# 不正なエントリ (パス区切り / '..' / 空以外の危険名) は ERROR で return 1。
+write_seed_stub() {
+  local path="$1" name="$2"
+  case "$name" in
+    findings.md)
+      cat >"$path" <<'STUB'
+# findings.md
+
+ホストが run-loop 開始時に用意したシードです。既存内容は消さず追記してください。
+
+| 重大度 | 件名 | 箇所 | 概要 | 推奨対応 |
+| --- | --- | --- | --- | --- |
+STUB
+      ;;
+    plan.md)
+      cat >"$path" <<'STUB'
+# plan.md
+
+ホストが run-loop 開始時に用意したシードです。調査計画と進捗を更新してください。
+
+## 計画
+
+- [ ] （初回: 対象の全体像を把握し、観点を列挙する）
+
+## 進捗メモ
+
+STUB
+      ;;
+    state.md)
+      cat >"$path" <<'STUB'
+# state.md
+
+ホストが run-loop 開始時に用意したシードです。解析済み画面・実施済み操作を記録してください。
+
+## 画面一覧
+
+## 実施済み操作
+
+## メモ
+
+STUB
+      ;;
+    review-notes.md)
+      cat >"$path" <<'STUB'
+# review-notes.md
+
+ホストが run-loop 開始時に用意したシードです。レビューメモを追記してください。
+
+## 変更の意図・影響範囲
+
+## 指摘事項
+
+## 総合判定メモ
+
+STUB
+      ;;
+    *)
+      printf '# %s\n\nホストが run-loop 開始時に用意したシードです。エージェントが追記・更新してください。\n' "$name" >"$path"
+      ;;
+  esac
+}
+
+ensure_seed_files() {
+  local output_dir="$1"
+  local seed_files_csv="${2:-}"
+  local seed seed_path created=0
+
+  [[ -n "$seed_files_csv" ]] || return 0
+
+  if [[ ! -d "$output_dir" ]]; then
+    log_error "seed 出力先ディレクトリがありません: ${output_dir}"
+    return 1
+  fi
+
+  while IFS= read -r seed || [[ -n "${seed:-}" ]]; do
+    seed="$(printf '%s' "$seed" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+    [[ -n "$seed" ]] || continue
+    # OUTPUT_DIR 直下の単純ファイル名のみ (パス区切り・絶対パス・'..' 禁止)
+    if ! printf '%s' "$seed" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$'; then
+      log_error "seed_files のエントリが不正です(OUTPUT_DIR 直下のファイル名のみ): ${seed}"
+      log_error "loop.yaml の seed_files は findings.md,plan.md のようにカンマ区切りで指定してください"
+      return 1
+    fi
+    seed_path="${output_dir}/${seed}"
+    if [[ -f "$seed_path" ]]; then
+      continue
+    fi
+    write_seed_stub "$seed_path" "$seed"
+    created=$((created + 1))
+    log_info "シード作成: ${seed}"
+  done < <(printf '%s\n' "$seed_files_csv" | tr ',' '\n')
+
+  if [[ "$created" -gt 0 ]]; then
+    log_info "進捗シード ${created} 件を用意しました (初回 Read の File not found を抑制)"
+  fi
+  return 0
+}
+
+# issue-url.txt が非空で http(s) URL らしいか検証する。成功で 0。
+# 受け入れる例: https://github.com/org/repo/issues/1
+# 拒否: 欠落/空/空白のみ、非 http(s)、URL 内空白、ホストなし、パスなし
 verify_issue_url_file() {
   local file="$1"
   if [[ ! -f "$file" ]]; then
@@ -203,15 +309,43 @@ verify_issue_url_file() {
     return 1
   fi
   case "$url" in
-    http://*|https://*)
-      log_ok "Issue URL を確認しました: ${url}"
-      return 0
-      ;;
-    *)
-      log_error "issue-url.txt の内容が URL ではありません: ${url}"
+    *[[:space:]]*)
+      log_error "issue-url.txt に空白が含まれています: ${url}"
       return 1
       ;;
   esac
+  case "$url" in
+    http://*|https://*) ;;
+    *)
+      log_error "issue-url.txt の内容が http(s) URL ではありません: ${url}"
+      return 1
+      ;;
+  esac
+  local rest="${url#http://}"
+  if [[ "$rest" == "$url" ]]; then
+    rest="${url#https://}"
+  fi
+  case "$rest" in
+    ''|/*)
+      log_error "issue-url.txt の URL 形式が不正です(ホストがありません): ${url}"
+      return 1
+      ;;
+  esac
+  case "$rest" in
+    */*)
+      local path_part="${rest#*/}"
+      if [[ -z "$path_part" ]]; then
+        log_error "issue-url.txt の URL にパスがありません: ${url}"
+        return 1
+      fi
+      ;;
+    *)
+      log_error "issue-url.txt の URL にパスがありません: ${url}"
+      return 1
+      ;;
+  esac
+  log_ok "Issue URL を確認しました: ${url}"
+  return 0
 }
 
 # TTS エンジン解決: LOOP_TTS_ENGINE 明示 > say(あれば) > voicevox(起動中) > none
@@ -257,4 +391,69 @@ resolve_mcp_permission() {
       return 1
       ;;
   esac
+}
+
+# サーバ別 MCP permission 上書き文字列を検証する。
+# 形式: github=allow,playwright=deny （空は可）
+validate_mcp_permission_overrides() {
+  local raw="${1:-}"
+  local part server mode
+  local rest="$raw"
+  [[ -z "$raw" ]] && return 0
+  while [[ -n "$rest" ]]; do
+    case "$rest" in
+      *,*)
+        part="${rest%%,*}"
+        rest="${rest#*,}"
+        ;;
+      *)
+        part="$rest"
+        rest=""
+        ;;
+    esac
+    # trim leading/trailing spaces (bash 3.2)
+    part="$(printf '%s' "$part" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+    [[ -z "$part" ]] && continue
+    case "$part" in
+      *=*) ;;
+      *)
+        log_error "mcp_permission_overrides は server=mode のカンマ区切りです: ${part}" >&2
+        return 1
+        ;;
+    esac
+    server="${part%%=*}"
+    mode="${part#*=}"
+    server="$(printf '%s' "$server" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+    mode="$(printf '%s' "$mode" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | tr '[:upper:]' '[:lower:]')"
+    if [[ ! "$server" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]]; then
+      log_error "MCP サーバ名が不正です: ${server}" >&2
+      return 1
+    fi
+    case "$mode" in
+      ask|allow|deny) ;;
+      *)
+        log_error "mcp permission は ask|allow|deny です: ${mode} (server=${server})" >&2
+        return 1
+        ;;
+    esac
+  done
+  return 0
+}
+
+# サーバ別上書きを解決: CLI > 環境変数 > yaml > 空
+# 出力は正規化済みの server=mode,... （空可）
+resolve_mcp_permission_overrides() {
+  local cli_value="${1:-}"
+  local yaml_file="${2:-}"
+  local value=""
+  if [[ -n "$cli_value" ]]; then
+    value="$cli_value"
+  elif [[ -n "${LOOP_MCP_PERMISSION_OVERRIDES:-}" ]]; then
+    value="$LOOP_MCP_PERMISSION_OVERRIDES"
+  elif [[ -n "$yaml_file" && -f "$yaml_file" ]]; then
+    value="$(yaml_get "$yaml_file" "mcp_permission_overrides" "")"
+  fi
+  value="$(printf '%s' "$value" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+  validate_mcp_permission_overrides "$value" || return 1
+  printf '%s' "$value"
 }

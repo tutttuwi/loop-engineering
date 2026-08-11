@@ -13,7 +13,7 @@
 
 ## 進め方(1イテレーションごとに続きから再開する前提)
 
-1. `{{OUTPUT_DIR}}/plan.md` を確認する(無ければ新規作成する)。
+1. `{{OUTPUT_DIR}}/plan.md` を確認する(ホストがシード済み。無ければ新規作成する)。
 
    **初回イテレーションでは、いきなりコードを読み始めず、必ず先に監査計画を立ててください。**
    計画には以下を含めること:
@@ -31,7 +31,7 @@
    - 各観点をどのエージェント/スキルで担当するか
      （`security-reviewer` / `code-reviewer`、スキル `security-review` / `production-audit`）
 
-2. `{{OUTPUT_DIR}}/findings.md` を確認する(無ければ新規作成する)。
+2. `{{OUTPUT_DIR}}/findings.md` を確認する(ホストがシード済み。無ければ新規作成する)。
    plan.md のうち未着手の項目を1つ選び、深掘り調査を行う。
    必要に応じて `security-reviewer` / `code-reviewer` サブエージェントに委譲してよい。
    依存監査コマンドは対象スタックに合わせて実行し、結果の要約を findings に残す

@@ -15,6 +15,8 @@
 
 ```bash
 # 1. 必要な資材をECCから取り込む(初回のみ)
+#    他ループと併用する場合は使うループをすべて一度に指定
+#    例: ./setup/sync-ecc-assets.sh --loop monkey-test --loop yabaiyo
 ./setup/sync-ecc-assets.sh --loop monkey-test
 
 # 2. 対象プロジェクトに接続設定を配置する(初回のみ)
@@ -31,8 +33,8 @@
 
 `<target>/.loop-engineering/output/monkey-test/<RUN_ID>/` に以下が生成されます:
 
-- `state.md`        : 解析済み画面・実施済み操作の記録(次回イテレーションの継続に使用)
-- `findings.md`     : 発見した問題の一覧
+- `state.md`        : 解析済み画面・実施済み操作の記録(ホストが `seed_files` で初回シード)
+- `findings.md`     : 発見した問題の一覧(同上)
 - `screenshots/`    : Playwrightで撮影したスクリーンショット
 - `report.md`       : Marp形式のスライドレポート
 - `report.pdf` / `slides/` : スライドのPDF・画像

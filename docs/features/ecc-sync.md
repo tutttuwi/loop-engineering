@@ -2,21 +2,35 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ステータス | `done`（P1-4 マニフェスト保護実装済み） |
-| 関連実装 | `setup/sync-ecc-assets.sh`, `loops/*/loop.yaml` (`ecc_agents` / `ecc_skills` / `ecc_rules`) |
+| ステータス | `done`（P1-4 マニフェスト保護 + マルチループ和集合） |
+| 関連実装 | `setup/sync-ecc-assets.sh`, `setup/update.sh`, `loops/*/loop.yaml` (`ecc_agents` / `ecc_skills` / `ecc_rules`) |
 | ロードマップ | P1-4 |
 
 ## 現状
 
 - `vendor/ecc` 全体は巨大なため、**使う分だけ** `project-config/{agents,skills,rules}` へ抽出
-- `--loop <name>` で `loop.yaml` の ecc_* を読む
+- `--loop <name>` で `loop.yaml` の ecc_* を読む（**複数指定で和集合**）
+- `--all-loops` で `loops/*/loop.yaml`（`_template` 除外）をすべて和集合
 - `--list` で候補表示
 - コピー元（vendor）は直接編集しない方針
+- マニフェスト外のユーザーファイルは保護される
 
-### ギャップ
+### マルチループ（重要）
 
-- `cp -R` 相当の上書きで、ユーザーが `project-config` に足したカスタムが **消える／潰れる**可能性がある
-- sync と init の「いつやるか」がドキュメント依存（自動化は [porting-and-update.md](./porting-and-update.md)）
+`project-config/.ecc-sync-manifest` は **1 つ**だけ。sync は「今回指定した ecc_* の集合」にマニフェストを揃える。
+
+- **悪い例**: ループごとに別々に sync → 後から実行したループ以外の ECC 由来が削除される
+- **良い例**: 併用するループを一度に指定して和集合 sync
+
+```bash
+./setup/sync-ecc-assets.sh --loop yabaiyo --loop security-audit --loop monkey-test
+# または
+./setup/sync-ecc-assets.sh --all-loops
+
+./setup/update.sh --loop yabaiyo --loop monkey-test
+```
+
+単一 `--loop` のときは警告を出し、他ループ用資材が落ちうることを明示する。
 
 ## 要件定義（P1-4）
 
@@ -35,9 +49,13 @@
 
 「ECC 由来」と「ユーザー由来」を区別できること（マニフェストまたはディレクトリ規約）。
 
+### FR-SYNC-4
+
+複数ループ併用時、各ループの ecc_* を和集合して一度の sync / 一つのマニフェストにできること。
+
 ## 設計
 
-### 案: マニフェスト方式（推奨）
+### 案: マニフェスト方式（推奨・実装済み）
 
 ```
 project-config/.ecc-sync-manifest
@@ -46,9 +64,10 @@ project-config/.ecc-sync-manifest
 
 同期アルゴリズム:
 
-1. マニフェスト記載ファイルのみ削除／置換の対象
-2. マニフェストに無いファイルはユーザー資産として保持
-3. 新規抽出分をコピーし、マニフェストを更新
+1. 指定ループ（複数可）の ecc_* を CSV 和集合（重複除去）
+2. マニフェスト記載ファイルのみ削除／置換の対象
+3. マニフェストに無いファイルはユーザー資産として保持
+4. 新規抽出分をコピーし、マニフェストを更新
 
 ### 案: ディレクトリ規約
 
@@ -58,7 +77,7 @@ project-config/rules/
 └── local/        # ユーザー専用（init は両方を対象へコピー）
 ```
 
-init / opencode `instructions` が両系を読むよう更新が必要。
+init / opencode `instructions` が両系を読むよう更新が必要（未採用）。
 
 ### 非目標
 
@@ -66,6 +85,8 @@ init / opencode `instructions` が両系を読むよう更新が必要。
 
 ## 受け入れ条件
 
-- [ ] ユーザー専用 md を置いた状態で sync → ファイルが残る
-- [ ] ECC 更新後の sync で ecc 由来ファイルは新内容になる
-- [ ] PORTING / README に方針が書かれている
+- [x] ユーザー専用 md を置いた状態で sync → ファイルが残る
+- [x] ECC 更新後の sync で ecc 由来ファイルは新内容になる
+- [x] 複数 `--loop` / `--all-loops` で和集合 sync できる
+- [x] PORTING / README / SETUP に方針が書かれている
+- [x] smoke で 2 ループ union + ユーザー資産保護を検証

@@ -2,7 +2,7 @@
 
 ローカルLLM（LM Studio 等）と [OpenCode](https://opencode.ai/ja)、[Open Ralph Wiggum](https://github.com/Th0rgal/open-ralph-wiggum)、[ECC (Everything Claude Code)](https://github.com/affaan-m/ECC) を組み合わせて、**同じタスクを反復しながら品質の高い成果物を得る**ループエンジニアリング基盤です。
 
-このリポジトリを他プロジェクトの隣に置く（または submodule 化する）だけで、同じ枠組みでモンキーテスト・設計監査・セキュリティ監査・PR/MR レビューなどを回せます。
+このリポジトリを他プロジェクトの隣に置く（または submodule 化する）だけで、同じ枠組みでモンキーテスト・設計監査・セキュリティ監査・依存関係監査・PR/MR レビューなどを回せます。
 
 ## できること
 
@@ -12,6 +12,7 @@
 | `yabaiyo` | 計画→コード精査で設計・実装の「ヤバい」箇所を収集 | findings / スライド / 動画 / Issue |
 | `pr-review` | 特定の MR/PR を読み解き、インライン＋総括レビューを投稿 | review-notes / コメント / Issue |
 | `security-audit` | セキュリティ監査（OWASP・秘密情報・認証認可・依存関係） | findings / スライド / 動画 / Issue |
+| `deps-audit` | 依存関係・サプライチェーン監査（outdated・脆弱性ツール・lockfile） | findings / スライド / 動画 / Issue |
 
 新しいアイデアは `loops/_template/` をコピーするだけで追加できます（枠組みは共通、中身だけ差し替え）。
 
@@ -40,7 +41,8 @@ loop-engineering/
 │   ├── monkey-test/
 │   ├── yabaiyo/
 │   ├── pr-review/
-│   └── security-audit/
+│   ├── security-audit/
+│   └── deps-audit/
 ├── project-config/                  # ★プロジェクト固有の差し替えポイント
 │   ├── target.yaml.example
 │   ├── target.yaml                  # 初期設定で作成（gitignore）。対象パス等
@@ -62,7 +64,7 @@ loop-engineering/
 | --- | --- | --- |
 | 依存初期化 | `./setup/install.sh` | `vendor/*` submodule 取得、診断 |
 | 対象指定 | `cp …/target.yaml.example` → 編集 | `project-config/target.yaml` |
-| ECC抽出 | `./setup/sync-ecc-assets.sh --loop <name>` | `project-config/{agents,skills,rules}/` に必要な分だけコピー |
+| ECC抽出 | `./setup/sync-ecc-assets.sh --loop <name> [--loop ...]` / `--all-loops` | `project-config/{agents,skills,rules}/` に必要な分だけコピー（複数指定は和集合） |
 | 対象へ接続 | `./setup/init-target-project.sh` | 対象PJ側に `.opencode/` と `.loop-engineering/` を作成 |
 | （任意）グローバル | `./setup/configure-opencode.sh` | `~/.config/opencode/opencode.json` |
 | ループ実行 | `./engine/run-loop.sh --loop <name>` | 対象PJの `.loop-engineering/output/...` に成果物 |
@@ -131,11 +133,12 @@ my-app/.loop-engineering/output/<loop>/<RUN_ID>/
 ```bash
 cd ~/dev/loop-engineering
 
-# 推奨: ワンショット更新
+# 推奨: ワンショット更新（併用ループはすべて --loop で渡す → 和集合 sync）
 ./setup/update.sh --loop yabaiyo --dry-run-loop yabaiyo
 # 複数ループ + 無人 permission + git pull もする場合:
 # ./setup/update.sh --pull --loop yabaiyo --loop monkey-test \
 #   --mcp-permission allow --dry-run-loop yabaiyo
+# 全バンドル: ./setup/update.sh --all-loops
 ```
 
 手動で段階実行する場合:
@@ -143,7 +146,8 @@ cd ~/dev/loop-engineering
 ```bash
 git pull                                 # 任意
 ./setup/bootstrap-submodules.sh
-./setup/sync-ecc-assets.sh --loop yabaiyo
+# 併用するループを一度に指定（単一だと他ループ分の ECC 由来が落ちうる）
+./setup/sync-ecc-assets.sh --loop yabaiyo --loop monkey-test
 ./setup/init-target-project.sh
 ./setup/doctor.sh
 ./engine/run-loop.sh --loop yabaiyo --dry-run
@@ -182,11 +186,9 @@ cp project-config/target.yaml.example project-config/target.yaml
 
 # 4. ECC資材の取り込み + 対象プロジェクトへ接続
 #    ※ ここで <target>/.opencode/opencode.json に LM Studio / MCP が入る
-#    使うループ分だけ sync する（複数可）
-./setup/sync-ecc-assets.sh --loop monkey-test   # モンキーテスト
-./setup/sync-ecc-assets.sh --loop yabaiyo       # ヤバイヨ（設計/実装監査）
-./setup/sync-ecc-assets.sh --loop pr-review     # MR/PRレビュー
-./setup/sync-ecc-assets.sh --loop security-audit # セキュリティ監査
+#    併用するループは一度に指定（和集合 sync）。別々に sync すると他ループ分が落ちる
+./setup/sync-ecc-assets.sh --loop monkey-test --loop yabaiyo --loop pr-review --loop security-audit --loop deps-audit
+# または全バンドル: ./setup/sync-ecc-assets.sh --all-loops
 # target.yaml の target_path を使う( --target で上書きも可 )
 ./setup/init-target-project.sh
 
@@ -210,6 +212,10 @@ cp project-config/target.yaml.example project-config/target.yaml
 # --- security-audit ---
 ./engine/run-loop.sh --loop security-audit --dry-run
 ./engine/run-loop.sh --loop security-audit
+
+# --- deps-audit ---
+./engine/run-loop.sh --loop deps-audit --dry-run
+./engine/run-loop.sh --loop deps-audit
 ```
 
 `./setup/configure-opencode.sh`（`~/.config/opencode/opencode.json` の更新）は **任意ステップ**です。  
@@ -257,7 +263,8 @@ cp project-config/target.yaml.example project-config/target.yaml
 環境診断は `./setup/doctor.sh` でいつでも実行できます。  
 エンジンの最小回帰は `./tests/smoke.sh`（GitHub Actions: `.github/workflows/smoke.yml`）。
 
-Marp の再現性が必要な場合は `export LOOP_MARP_VERSION=@marp-team/marp-cli@4.5.0` を推奨します。
+Marp の再現性が必要な場合は `export LOOP_MARP_VERSION=@marp-team/marp-cli@4.5.0` を推奨します。  
+レポート/動画のホスト保険と手動再変換は [docs/features/report-video-pipeline.md](docs/features/report-video-pipeline.md) を参照。
 
 ## ライセンス
 

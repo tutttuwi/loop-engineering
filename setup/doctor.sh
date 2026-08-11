@@ -178,6 +178,19 @@ try:
 except Exception:
   print('')
 " "$opencode_json" 2>/dev/null || true)"
+      mcp_ovr="$(python3 -c "
+import json,sys
+try:
+  p=json.load(open(sys.argv[1],encoding='utf-8')).get('permission',{}) or {}
+  parts=[]
+  for k,v in sorted(p.items()):
+    if k=='mcp_*' or not k.endswith('_*'):
+      continue
+    parts.append(f'{k[:-2]}={v}')
+  print(','.join(parts))
+except Exception:
+  print('')
+" "$opencode_json" 2>/dev/null || true)"
       if [[ -z "$mcp_perm" ]]; then
         log_warn "permission.mcp_* 未設定 — init 再実行を推奨"
         warn_count=$((warn_count + 1))
@@ -186,6 +199,10 @@ except Exception:
         warn_count=$((warn_count + 1))
       else
         log_ok "mcp permission: ${mcp_perm}"
+        ok_count=$((ok_count + 1))
+      fi
+      if [[ -n "$mcp_ovr" ]]; then
+        log_ok "mcp permission overrides: ${mcp_ovr}"
         ok_count=$((ok_count + 1))
       fi
     fi

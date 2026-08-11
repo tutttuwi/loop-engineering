@@ -13,7 +13,7 @@ Issue対象        : {{ISSUE_TARGET}}
 
 ## 進め方(1イテレーションごとに続きから再開する前提)
 
-1. `{{OUTPUT_DIR}}/review-notes.md` を確認する(無ければ新規作成する)。
+1. `{{OUTPUT_DIR}}/review-notes.md` を確認する(ホストがシード済み。無ければ新規作成する)。
 
 2. **初回イテレーション**: MCPツールでMR/PRの差分・説明・関連Issue・CI結果を取得し、
    変更の意図と影響範囲を把握する。把握した内容を review-notes.md に記録する。

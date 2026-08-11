@@ -178,20 +178,24 @@ cp project-config/target.yaml.example project-config/target.yaml
 ## [6] ECC 資材の取り込み
 
 ループごとに必要な agents / skills / rules だけを `project-config/` にコピーします。
+**複数ループを併用する場合は、使うループを一度のコマンドで全部指定**してください（和集合で 1 マニフェストに揃えます）。ループごとに別々に sync すると、後から指定したループ以外の ECC 由来が削除されます。
 
 ```bash
-# 使うループごとに実行（複数ループ使うならそれぞれ）
+# 併用するループを一度に指定（推奨）
+./setup/sync-ecc-assets.sh --loop monkey-test --loop yabaiyo --loop pr-review --loop security-audit --loop deps-audit
+
+# バンドル全ループを和集合
+./setup/sync-ecc-assets.sh --all-loops
+
+# 単一ループのみ使う場合
 ./setup/sync-ecc-assets.sh --loop monkey-test
-./setup/sync-ecc-assets.sh --loop yabaiyo
-./setup/sync-ecc-assets.sh --loop pr-review
-./setup/sync-ecc-assets.sh --loop security-audit
 
 # 利用可能な一覧を見る
 ./setup/sync-ecc-assets.sh --list
 ```
 
 取り込む一覧は各 `loops/<name>/loop.yaml` の `ecc_agents` / `ecc_skills` / `ecc_rules` で定義されています。  
-プロジェクト固有ルールは `project-config/rules/` に直接追加・編集してください（`vendor/ecc` は編集しない）。
+プロジェクト固有ルールは `project-config/rules/` に直接追加・編集してください（`vendor/ecc` は編集しない）。マニフェスト（`.ecc-sync-manifest`）に無いファイルはユーザー資産として保持されます。詳細は [features/ecc-sync.md](./features/ecc-sync.md)。
 
 ---
 
@@ -220,7 +224,8 @@ cp project-config/target.yaml.example project-config/target.yaml
 
 既存の `opencode.json` がある場合は `.bak.<timestamp>` にバックアップします。  
 個別にオフにする場合: `--without-github` / `--without-gitlab` / `--without-playwright` / `--without-serena` / `--without-lsp`  
-無人ループ向け: `--mcp-permission allow`（既定は `ask`。詳細は [features/permissions-unattended.md](./features/permissions-unattended.md)）
+無人ループ向け: `--mcp-permission allow`（既定は `ask`。詳細は [features/permissions-unattended.md](./features/permissions-unattended.md)）  
+サーバ別上書き例: `--mcp-permission-overrides github=allow,playwright=deny`（`permission.<server>_*`）
 
 ### Issue 投稿用トークン
 
@@ -251,6 +256,7 @@ cp project-config/target.yaml.example project-config/target.yaml
 ./engine/run-loop.sh --loop yabaiyo --max-iterations 20
 ./engine/run-loop.sh --loop pr-review --model lmstudio/qwen3-coder-30b
 ./engine/run-loop.sh --loop security-audit --max-iterations 20
+./engine/run-loop.sh --loop deps-audit --max-iterations 15
 ./engine/run-loop.sh --loop monkey-test --extra "--tasks --no-commit"
 ./engine/run-loop.sh --loop yabaiyo --post-report   # Marp/動画のホスト側保険
 ```
@@ -259,6 +265,9 @@ cp project-config/target.yaml.example project-config/target.yaml
 
 ```bash
 ./setup/init-target-project.sh --mcp-permission allow
+# 例: 一括 ask のまま github だけ allow
+# ./setup/init-target-project.sh --mcp-permission ask \
+#   --mcp-permission-overrides github=allow,playwright=deny
 ```
 
 実行中は対象プロジェクトのカレントで Ralph がループします。別ターミナルから:
@@ -278,11 +287,11 @@ bun .../ralph.ts --add-context "まずはログイン画面の二重送信から
 
 | やりたいこと | コマンド | 詳細 |
 | --- | --- | --- |
-| 一発更新（sync→init→doctor） | `./setup/update.sh --loop <name>` | [porting-and-update.md](./features/porting-and-update.md) |
+| 一発更新（sync→init→doctor） | `./setup/update.sh --loop <name> [--loop ...]` / `--all-loops` | [porting-and-update.md](./features/porting-and-update.md) / [ecc-sync.md](./features/ecc-sync.md) |
 | 無人 MCP permission | `init` / `update.sh` に `--mcp-permission allow` | [permissions-unattended.md](./features/permissions-unattended.md) |
 | レポート/動画の保険 | `run-loop.sh --post-report` | [report-video-pipeline.md](./features/report-video-pipeline.md) |
 | 成果物の一覧・掃除 | `./engine/list-runs.sh` / `./engine/clean-runs.sh` | [artifact-lifecycle.md](./features/artifact-lifecycle.md) |
-| エンジン smoke | `./tests/smoke.sh` | yaml_get / render-prompt / dry-run 等 |
+| エンジン smoke | `./tests/smoke.sh` | yaml_get / render-prompt / dry-run / post-report·Marp 等 |
 
 ```bash
 ./setup/update.sh --loop yabaiyo --mcp-permission allow --dry-run-loop yabaiyo
@@ -302,6 +311,10 @@ bun .../ralph.ts --add-context "まずはログイン画面の二重送信から
 export LOOP_MARP_VERSION=@marp-team/marp-cli@4.5.0
 export LOOP_TTS_ENGINE=none   # Linux で無音にする場合など
 ```
+
+レポート経路の詳細（手動再変換・欠落時スキップ・TTS/動画が partial な理由）は
+[features/report-video-pipeline.md](./features/report-video-pipeline.md) を参照。
+経路の回帰は `./tests/smoke.sh` の「post-report / Marp」節（実 Chromium / TTS なし）。
 
 ---
 

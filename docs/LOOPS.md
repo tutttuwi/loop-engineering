@@ -3,6 +3,15 @@
 ループはすべて同じ枠組み（Ralph + OpenCode + 成果物パイプライン）で動き、  
 `./engine/run-loop.sh --loop <name>` の引数だけで切り替えます。
 
+複数ループを併用する場合、ECC sync は使うループを **一度に** 指定してください（和集合で 1 マニフェスト）。
+
+```bash
+./setup/sync-ecc-assets.sh --loop monkey-test --loop yabaiyo --loop security-audit --loop deps-audit
+# または ./setup/sync-ecc-assets.sh --all-loops
+```
+
+詳細は [features/ecc-sync.md](./features/ecc-sync.md)。
+
 ## 同梱ループ
 
 ### monkey-test — モンキーテストループ
@@ -78,6 +87,24 @@ Issue投稿は既定で実行ごとに新規作成（`issue_post_mode: create`�
 ./engine/run-loop.sh --loop security-audit --target /path/to/app
 ```
 
+### deps-audit — 依存関係・サプライチェーン監査ループ
+
+| 項目 | 内容 |
+| --- | --- |
+| 目的 | outdated・既知脆弱性ツール・lockfile衛生など依存関係に特化した監査 |
+| 完了 promise | `DEPS_AUDIT_COMPLETE` |
+| 既定イテレーション | min 2 / max 15 |
+| ECC資材 | security-reviewer, code-reviewer / security-review, production-audit / common |
+
+アプリコードの OWASP 全般は security-audit、本ループはマニフェスト / lock / 依存リスクに特化。
+
+詳細: [`loops/deps-audit/README.md`](../loops/deps-audit/README.md)
+
+```bash
+./setup/sync-ecc-assets.sh --loop deps-audit
+./engine/run-loop.sh --loop deps-audit --target /path/to/app
+```
+
 ---
 
 ## 新規ループの追加
@@ -104,7 +131,7 @@ cp -R loops/_template loops/my-new-loop
 
 | ファイル | 役割 |
 | --- | --- |
-| `loop.yaml` | 名前・イテレーション・完了promise・ECC取り込み一覧 |
+| `loop.yaml` | 名前・イテレーション・完了promise・`seed_files`・ECC取り込み一覧 |
 | `prompt.md` | 毎イテレーション同じプロンプト（`{{VAR}}` 展開あり） |
 | `report-template.md` | スライド構成の指針 |
 | `README.md` | 人間向けの使い方 |

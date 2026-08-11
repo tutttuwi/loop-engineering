@@ -59,6 +59,6 @@ issue_target:
 
 `<target>/.loop-engineering/output/pr-review/<RUN_ID>/` に以下が生成されます。
 
-- `review-notes.md` … レビューメモ
+- `review-notes.md` … レビューメモ（ホストが `seed_files` で初回シード）
 - `issue-url.txt` … 作成または追記したIssueのURL
 - （任意）`report.md` / `slides/` … 重大指摘が多い場合のスライド

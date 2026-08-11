@@ -24,8 +24,8 @@
 
 `<target>/.loop-engineering/output/yabaiyo/<RUN_ID>/` に以下が生成されます:
 
-- `plan.md`      : 調査計画と進捗
-- `findings.md`  : 発見した不備の一覧(重大度・該当箇所・ベストプラクティス付き)
+- `plan.md`      : 調査計画と進捗(ホストが `seed_files` で初回シード)
+- `findings.md`  : 発見した不備の一覧(重大度・該当箇所・ベストプラクティス付き。同上)
 - `report.md` / `report.pdf` / `slides/` : スライドレポート
 - `report.mp4`   : ナレーション付き報告動画
 - GitHub/GitLab Issue: 上記の要約が自動投稿される

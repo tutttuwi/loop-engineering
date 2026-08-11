@@ -29,6 +29,7 @@ with_playwright=""     # unset → 1
 with_serena=""         # unset → 1
 with_lsp=""            # unset → 1
 mcp_permission_cli=""
+mcp_permission_overrides_cli=""
 
 usage() {
   cat >&2 <<EOF
@@ -42,6 +43,8 @@ Options:
   --config-path <path>       更新する opencode.json (既定: ${config_target})
   --mcp <choice>             Issue投稿用MCP: github | gitlab | both | none (既定: both)
   --mcp-permission <mode>    ask|allow|deny (既定: ask。無人時は allow)
+  --mcp-permission-overrides <map>
+                             サーバ別上書き。例: github=allow,playwright=deny
   --with-playwright          Playwright MCP を登録する(既定)
   --without-playwright       Playwright MCP を登録しない
   --with-serena              Serena MCP を登録する(既定・要 uvx)
@@ -104,6 +107,7 @@ while [[ $# -gt 0 ]]; do
     --with-lsp) with_lsp=1; shift ;;
     --without-lsp) with_lsp=0; shift ;;
     --mcp-permission) mcp_permission_cli="$2"; shift 2 ;;
+    --mcp-permission-overrides) mcp_permission_overrides_cli="$2"; shift 2 ;;
     --yes|-y) assume_yes=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) log_error "不明な引数: $1"; usage; exit 1 ;;
@@ -327,6 +331,7 @@ LOOP_ENABLE_PLAYWRIGHT="$with_playwright" \
 LOOP_ENABLE_SERENA="$with_serena" \
 LOOP_ENABLE_LSP="$with_lsp" \
 LOOP_MCP_PERMISSION="$(resolve_mcp_permission "$mcp_permission_cli" "")" \
+LOOP_MCP_PERMISSION_OVERRIDES="$(resolve_mcp_permission_overrides "$mcp_permission_overrides_cli" "")" \
 LOOP_SETUP_LIB="${SCRIPT_DIR}/lib" \
 python3 - <<'PYEOF'
 import json
@@ -334,7 +339,7 @@ import os
 import sys
 
 sys.path.insert(0, os.environ["LOOP_SETUP_LIB"])
-from opencode_mcp_servers import apply_mcp_servers, mcp_selection_label
+from opencode_mcp_servers import apply_mcp_servers, mcp_selection_label, parse_mcp_permission_overrides
 
 base_url = os.environ["LOOP_LMSTUDIO_BASE_URL"]
 model_id = os.environ["LOOP_LMSTUDIO_MODEL_ID"]
@@ -346,6 +351,9 @@ enable_playwright = os.environ.get("LOOP_ENABLE_PLAYWRIGHT", "0") == "1"
 enable_serena = os.environ.get("LOOP_ENABLE_SERENA", "0") == "1"
 enable_lsp = os.environ.get("LOOP_ENABLE_LSP", "0") == "1"
 mcp_permission = os.environ.get("LOOP_MCP_PERMISSION", "ask")
+mcp_permission_overrides = parse_mcp_permission_overrides(
+    os.environ.get("LOOP_MCP_PERMISSION_OVERRIDES", "")
+)
 
 config = {}
 if os.path.exists(target):
@@ -379,6 +387,7 @@ apply_mcp_servers(
     lsp=enable_lsp,
     mcp_permission=mcp_permission,
     force_mcp_permission=True,
+    mcp_permission_overrides=mcp_permission_overrides,
 )
 
 with open(target, "w", encoding="utf-8") as f:
@@ -392,8 +401,14 @@ label = mcp_selection_label(
     serena=enable_serena,
     lsp=enable_lsp,
 )
+override_label = (
+    ",".join(f"{k}={v}" for k, v in sorted(mcp_permission_overrides.items()))
+    if mcp_permission_overrides
+    else "-"
+)
 print(
-    f"[OK] {target} を更新しました (model=lmstudio/{model_id}, features={label}, mcp_permission={mcp_permission})",
+    f"[OK] {target} を更新しました (model=lmstudio/{model_id}, features={label},"
+    f" mcp_permission={mcp_permission}, overrides={override_label})",
     flush=True,
 )
 PYEOF

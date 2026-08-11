@@ -39,6 +39,7 @@ model_name=""
 display_name=""
 repo_provider=""
 mcp_permission_cli=""
+mcp_permission_overrides_cli=""
 target_config=""
 target_registry_name=""
 
@@ -61,6 +62,9 @@ Options:
   --display-name <name>       対象の表示名(省略時は target.yaml の target_name → ディレクトリ名)
   --repo-provider <p>         github | gitlab | both (省略時は target.yaml → github)
   --mcp-permission <mode>     ask|allow|deny (既定: ask。無人ループは allow)
+  --mcp-permission-overrides <map>
+                              サーバ別上書き。例: github=allow,playwright=deny
+                              (OpenCode: permission.<server>_*)
   --no-write-target-yaml      解決済み target.yaml を更新しない
   --without-github            mcp.github を登録しない
   --without-gitlab            mcp.gitlab を登録しない
@@ -92,6 +96,7 @@ while [[ $# -gt 0 ]]; do
     --display-name) display_name="$2"; shift 2 ;;
     --repo-provider) repo_provider="$2"; shift 2 ;;
     --mcp-permission) mcp_permission_cli="$2"; shift 2 ;;
+    --mcp-permission-overrides) mcp_permission_overrides_cli="$2"; shift 2 ;;
     --no-write-target-yaml) write_target_yaml=0; shift ;;
     --without-github) enable_github=0; shift ;;
     --without-gitlab) enable_gitlab=0; shift ;;
@@ -187,7 +192,11 @@ if [[ -f "$opencode_json" ]]; then
 fi
 
 mcp_permission="$(resolve_mcp_permission "$mcp_permission_cli" "$target_yaml")" || exit 1
+mcp_permission_overrides="$(resolve_mcp_permission_overrides "$mcp_permission_overrides_cli" "$target_yaml")" || exit 1
 log_info "mcp_permission : ${mcp_permission}"
+if [[ -n "$mcp_permission_overrides" ]]; then
+  log_info "mcp_permission_overrides : ${mcp_permission_overrides}"
+fi
 
 LOOP_TARGET_OPENCODE_JSON="$opencode_json" \
 LOOP_BASE_URL="$base_url" \
@@ -201,10 +210,14 @@ LOOP_ENABLE_PLAYWRIGHT="$enable_playwright" \
 LOOP_ENABLE_SERENA="$enable_serena" \
 LOOP_ENABLE_LSP="$enable_lsp" \
 LOOP_MCP_PERMISSION="$mcp_permission" \
+LOOP_MCP_PERMISSION_OVERRIDES="$mcp_permission_overrides" \
 python3 "${SCRIPT_DIR}/lib/build_target_opencode_config.py"
 
 log_ok "opencode.json を生成/更新しました: ${opencode_json}"
 log_info "登録内容: github=${enable_github} gitlab=${enable_gitlab} playwright=${enable_playwright} serena=${enable_serena} lsp=${enable_lsp} mcp_permission=${mcp_permission}"
+if [[ -n "$mcp_permission_overrides" ]]; then
+  log_info "サーバ別 permission: ${mcp_permission_overrides}"
+fi
 if [[ "$mcp_permission" == "ask" ]]; then
   log_info "無人ループでは --mcp-permission allow を推奨します"
 fi

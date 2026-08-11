@@ -9,13 +9,21 @@
 #   - マニフェスト記載のパスのみ削除・上書きの対象
 #   - マニフェストに無いファイルはユーザー資産として保持(上書きしない)
 #
+# マルチループ:
+#   --loop を複数指定、または --all-loops で loops/*/loop.yaml を和集合して一度だけ sync する。
+#   単一 --loop だと他ループ分の ECC 由来がマニフェストから外れ削除される点に注意。
+#
 # bash 3.2 互換(連想配列を使わない)。
 #
 # 使い方:
 #   ./setup/sync-ecc-assets.sh --loop monkey-test
+#   ./setup/sync-ecc-assets.sh --loop yabaiyo --loop security-audit --loop monkey-test
+#   ./setup/sync-ecc-assets.sh --all-loops
 #   ./setup/sync-ecc-assets.sh --agents architect --skills x --rules common
 #   ./setup/sync-ecc-assets.sh --list
 #   ./setup/sync-ecc-assets.sh --loop yabaiyo --backup
+#
+# テスト用: ECC_SYNC_DEST でコピー先ルートを上書き可能。
 #
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,13 +32,14 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "${ROOT_DIR}/engine/lib/common.sh"
 
 ECC_DIR="${ROOT_DIR}/vendor/ecc"
-DEST_ROOT="${ROOT_DIR}/project-config"
+DEST_ROOT="${ECC_SYNC_DEST:-${ROOT_DIR}/project-config}"
 DEST_AGENTS="${DEST_ROOT}/agents"
 DEST_SKILLS="${DEST_ROOT}/skills"
 DEST_RULES="${DEST_ROOT}/rules"
 MANIFEST="${DEST_ROOT}/.ecc-sync-manifest"
 
-loop_name=""
+loops=()
+all_loops=0
 agents_csv=""
 skills_csv=""
 rules_csv=""
@@ -40,17 +49,73 @@ do_backup=0
 usage() {
   cat >&2 <<'EOF'
 Usage:
-  sync-ecc-assets.sh --loop <name> [--backup]
+  sync-ecc-assets.sh --loop <name> [--loop <name> ...] [--backup]
+  sync-ecc-assets.sh --all-loops [--backup]
   sync-ecc-assets.sh --agents a,b,c --skills x,y --rules common,web [--backup]
   sync-ecc-assets.sh --list
 
---backup ... ECC由来ファイルを上書きする前に .bak.TIMESTAMP を残す
+--loop <name> ... loop.yaml の ecc_* を読む(複数指定で和集合)
+--all-loops   ... loops/*/loop.yaml を列挙(_template 除外)して和集合
+--backup      ... ECC由来ファイルを上書きする前に .bak.TIMESTAMP を残す
+
+複数ループを併用する場合は、使うループをすべて一度に指定すること。
+単一 --loop だと、他ループ用の ECC 由来資材がマニフェストから外れ削除される。
 EOF
+}
+
+# CSV トークンを改行ファイルへ重複なく追記(bash 3.2 / 連想配列なし)
+csv_append_unique() {
+  local csv="$1"
+  local out_file="$2"
+  [[ -z "$csv" ]] && return 0
+  local old_ifs="$IFS"
+  IFS=','
+  # shellcheck disable=SC2206
+  local items=($csv)
+  IFS="$old_ifs"
+  local item
+  for item in "${items[@]}"; do
+    item="$(echo "$item" | xargs)"
+    [[ -z "$item" ]] && continue
+    if ! grep -qxF "$item" "$out_file" 2>/dev/null; then
+      printf '%s\n' "$item" >> "$out_file"
+    fi
+  done
+}
+
+nl_file_to_csv() {
+  local f="$1"
+  local result="" line
+  [[ -f "$f" ]] || { printf ''; return 0; }
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "$line" ]] && continue
+    if [[ -z "$result" ]]; then
+      result="$line"
+    else
+      result="${result},${line}"
+    fi
+  done < "$f"
+  printf '%s' "$result"
+}
+
+discover_all_loops() {
+  local yaml name
+  for yaml in "${ROOT_DIR}/loops"/*/loop.yaml; do
+    [[ -f "$yaml" ]] || continue
+    name="$(basename "$(dirname "$yaml")")"
+    [[ "$name" == "_template" ]] && continue
+    loops+=("$name")
+  done
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --loop) loop_name="$2"; shift 2 ;;
+    --loop)
+      [[ $# -ge 2 ]] || { log_error "--loop には名前が必要です"; usage; exit 1; }
+      loops+=("$2")
+      shift 2
+      ;;
+    --all-loops) all_loops=1; shift ;;
     --agents) agents_csv="$2"; shift 2 ;;
     --skills) skills_csv="$2"; shift 2 ;;
     --rules) rules_csv="$2"; shift 2 ;;
@@ -78,17 +143,56 @@ if [[ "$list_only" -eq 1 ]]; then
   exit 0
 fi
 
-if [[ -n "$loop_name" ]]; then
-  loop_yaml="${ROOT_DIR}/loops/${loop_name}/loop.yaml"
-  [[ -f "$loop_yaml" ]] || { log_error "ループ定義が見つかりません: ${loop_yaml}"; exit 1; }
-  agents_csv="${agents_csv:-$(yaml_get "$loop_yaml" "ecc_agents" "")}"
-  skills_csv="${skills_csv:-$(yaml_get "$loop_yaml" "ecc_skills" "")}"
-  rules_csv="${rules_csv:-$(yaml_get "$loop_yaml" "ecc_rules" "common")}"
-  log_info "loop.yaml から取得: ecc_agents=[${agents_csv}] ecc_skills=[${skills_csv}] ecc_rules=[${rules_csv}]"
+if [[ "$all_loops" -eq 1 ]]; then
+  if [[ "${#loops[@]}" -gt 0 ]]; then
+    log_error "--all-loops と --loop は同時に指定できません"
+    usage
+    exit 1
+  fi
+  discover_all_loops
+  if [[ "${#loops[@]}" -eq 0 ]]; then
+    log_error "loops/*/loop.yaml が見つかりません"
+    exit 1
+  fi
+  log_info "--all-loops: ${loops[*]}"
+fi
+
+if [[ "${#loops[@]}" -gt 0 ]]; then
+  if [[ "${#loops[@]}" -eq 1 ]]; then
+    log_warn "単一 --loop (${loops[0]}) です。他ループ用の ECC 由来資材はマニフェストから外れ削除される可能性があります。併用時は --loop a --loop b ... または --all-loops を指定してください"
+  fi
+
+  agents_set="$(mktemp)"
+  skills_set="$(mktemp)"
+  rules_set="$(mktemp)"
+
+  for loop_name in "${loops[@]}"; do
+    loop_yaml="${ROOT_DIR}/loops/${loop_name}/loop.yaml"
+    [[ -f "$loop_yaml" ]] || {
+      rm -f "$agents_set" "$skills_set" "$rules_set"
+      log_error "ループ定義が見つかりません: ${loop_yaml}"
+      exit 1
+    }
+    a="$(yaml_get "$loop_yaml" "ecc_agents" "")"
+    s="$(yaml_get "$loop_yaml" "ecc_skills" "")"
+    r="$(yaml_get "$loop_yaml" "ecc_rules" "common")"
+    log_info "loop=${loop_name}: ecc_agents=[${a}] ecc_skills=[${s}] ecc_rules=[${r}]"
+    csv_append_unique "$a" "$agents_set"
+    csv_append_unique "$s" "$skills_set"
+    csv_append_unique "$r" "$rules_set"
+  done
+
+  # CLI で明示したカテゴリは上書き。未指定ならループ和集合を使う
+  agents_csv="${agents_csv:-$(nl_file_to_csv "$agents_set")}"
+  skills_csv="${skills_csv:-$(nl_file_to_csv "$skills_set")}"
+  rules_csv="${rules_csv:-$(nl_file_to_csv "$rules_set")}"
+  rm -f "$agents_set" "$skills_set" "$rules_set"
+
+  log_info "和集合: ecc_agents=[${agents_csv}] ecc_skills=[${skills_csv}] ecc_rules=[${rules_csv}]"
 fi
 
 if [[ -z "$agents_csv" && -z "$skills_csv" && -z "$rules_csv" ]]; then
-  log_error "--loop か、--agents/--skills/--rules のいずれかを指定してください"
+  log_error "--loop / --all-loops か、--agents/--skills/--rules のいずれかを指定してください"
   usage
   exit 1
 fi
@@ -218,6 +322,6 @@ done < "$OLD_MANIFEST_TMP"
   fi
 } > "$MANIFEST"
 
-log_ok "ECC資材の取り込みが完了しました -> project-config/{agents,skills,rules}"
+log_ok "ECC資材の取り込みが完了しました -> ${DEST_ROOT}/{agents,skills,rules}"
 log_info "マニフェスト: ${MANIFEST}"
 log_info "対象プロジェクトへ反映するには ./setup/init-target-project.sh を実行してください"

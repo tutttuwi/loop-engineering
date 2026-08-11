@@ -2,8 +2,8 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ステータス | `done`（枠組み + `security-audit` 製品化）。個別アイデアの改善は継続 |
-| 関連実装 | `loops/monkey-test`, `loops/yabaiyo`, `loops/pr-review`, `loops/security-audit`, `loops/_template`, `setup/new-loop.sh` |
+| ステータス | `done`（枠組み + `security-audit` / `deps-audit` 製品化） |
+| 関連実装 | `loops/monkey-test`, `loops/yabaiyo`, `loops/pr-review`, `loops/security-audit`, `loops/deps-audit`, `loops/_template`, `setup/new-loop.sh` |
 | 詳細 | [../LOOPS.md](../LOOPS.md) |
 
 ## 要件定義（共通）
@@ -56,14 +56,40 @@
 | 成果 | report / narration / pdf / mp4 / Issue |
 | 依存 | security-reviewer / code-reviewer、security-review / production-audit |
 
+### deps-audit
+
+| 項目 | 内容 |
+| --- | --- |
+| 目的 | 依存関係・サプライチェーン監査（outdated・既知脆弱性ツール・lockfile衛生） |
+| 入力 | 対象ソース（cwd） |
+| 進捗ファイル | `plan.md`, `findings.md` |
+| 成果 | report / narration / pdf / mp4 / Issue |
+| 依存 | security-reviewer / code-reviewer、security-review / production-audit |
+
 ## 設計上の改善候補（実装は任意）
 
-1. **初回シード**: run-loop 開始時に空の `plan.md` / `findings.md` / `state.md` をホストが作成し、エージェントの「File not found」ノイズを減らす — `require_issue` / `seed_files` は loop.yaml で対応済み（ループごと）
-2. 追加の製品ループ（deps-audit 専用など）は需要に応じて `_template` から追加
+1. ~~初回シード~~ — **done**（下記「seed_files 契約」）
+2. ~~deps-audit 専用ループ~~ — **done**（`loops/deps-audit/`）
+3. 追加の製品ループは需要に応じて `_template` から追加
+
+## seed_files 契約
+
+`loop.yaml` の `seed_files`（カンマ区切り）で、run-loop 開始時にホストが OUTPUT_DIR 直下へ進捗スタブを作る。
+
+| 規則 | 内容 |
+| --- | --- |
+| 配置 | `<target>/.loop-engineering/output/<loop>/<RUN_ID>/` 直下のみ |
+| 名前 | 単純ファイル名（英数字・`._-`）。パス区切り / `..` / 絶対パスは拒否 |
+| 既存 | 既にあるファイルは上書きしない（再開・手動編集を保護） |
+| スタブ | `findings.md` / `plan.md` / `state.md` / `review-notes.md` は見出し付き。その他は汎用ヘッダ |
+| 実装 | `ensure_seed_files`（`engine/lib/common.sh`）← `engine/run-loop.sh` |
+
+同梱ループの設定例: monkey-test=`state.md,findings.md`、yabaiyo/security-audit/deps-audit=`plan.md,findings.md`、pr-review=`review-notes.md`。
 
 ## 受け入れ条件（現状）
 
-- [x] 同梱ループが dry-run でプロンプト展開できる（monkey-test / yabaiyo / pr-review / security-audit）
+- [x] 同梱ループが dry-run でプロンプト展開できる（monkey-test / yabaiyo / pr-review / security-audit / deps-audit）
 - [x] new-loop でひな形複製ができる
 - [x] セキュリティ監査専用ループ（`security-audit`）を製品化
-- [ ] （改善）シードファイルで初回 Read 失敗を消す — planned 小項目（ホスト側シードは一部実装済み）
+- [x] 依存関係監査専用ループ（`deps-audit`）を製品化
+- [x] シードファイルで初回 Read 失敗を抑制（`seed_files` + `ensure_seed_files` + smoke）

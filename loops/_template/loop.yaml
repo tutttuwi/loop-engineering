@@ -21,8 +21,9 @@ completion_promise: TEMPLATE_COMPLETE
 
 # ホスト側 Issue 完了ゲート (true|false)。Issue不要なループは false
 require_issue: true
-# 実行開始時に空ファイルを作る進捗ファイル(カンマ区切り)
-seed_files: findings.md
+# 実行開始時に OUTPUT_DIR 直下へ進捗スタブを作る(カンマ区切り・ファイル名のみ・既存は上書きしない)
+# 既知名 findings.md / plan.md / state.md / review-notes.md は見出し付きスタブ
+seed_files: plan.md,findings.md
 
 # このディレクトリ内のファイル名(相対パス)
 prompt_file: prompt.md

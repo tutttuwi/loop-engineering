@@ -186,15 +186,7 @@ output_dir="${runtime_root}/output/${loop_name}/${run_id}"
 mkdir -p "$output_dir"
 
 # 進捗ファイルのシード(初回 Read の File not found を減らす)
-if [[ -n "$seed_files_csv" ]]; then
-  while IFS= read -r seed; do
-    [[ -n "$seed" ]] || continue
-    seed_path="${output_dir}/${seed}"
-    if [[ ! -f "$seed_path" ]]; then
-      printf '# %s\n\n(初回シード。エージェントが追記・更新してください)\n' "$seed" > "$seed_path"
-    fi
-  done < <(printf '%s\n' "$seed_files_csv" | tr ',' '\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | grep -v '^$')
-fi
+ensure_seed_files "$output_dir" "$seed_files_csv" || exit 1
 
 # report-template も対象PJ内へコピー
 report_template_src="${loop_dir}/report-template.md"
@@ -245,8 +237,9 @@ if [[ "$issue_post_mode" == "create" ]]; then
 
 1. ${repo_provider} のMCPツールを使い、\`${repo_url}\` に**新しいIssueを1件作成**する
 2. タイトル・本文にはこのループの要約と成果物への参照を含める
-3. 作成に**成功したときだけ**、Issueの番号とURLを \`${output_dir}/issue-url.txt\` に1行で保存する
+3. 作成に**成功したときだけ**、IssueのURLを \`${output_dir}/issue-url.txt\` に1行で保存する
    (例: https://github.com/org/repo/issues/123 )
+   ホスト検証: http(s)・ホストあり・パスあり・空白なし。それ以外は拒否される
    投稿に失敗した場合は issue-url.txt を書かないこと(ホスト側が検証する)
 4. 同じループ実行内で既に \`issue-url.txt\` がある場合は新規作成せず、そのIssueへ追記する
 EOF
@@ -258,7 +251,8 @@ else
 1. 既存Issue \`${issue_target}\` を対象にする(番号またはURL)
 2. ${repo_provider} のMCPツールで、そのIssueに**コメントを追記**する(本文を上書きしない)
 3. コメントにはこのループ実行(RUN_ID: ${run_id})の要約と成果物への参照を含める
-4. 追記に**成功したときだけ**、実際に書き込んだIssueのURLを \`${output_dir}/issue-url.txt\` に保存する
+4. 追記に**成功したときだけ**、実際に書き込んだIssueのURLを \`${output_dir}/issue-url.txt\` に1行で保存する
+   ホスト検証: http(s)・ホストあり・パスあり・空白なし。それ以外は拒否される
    失敗時は issue-url.txt を書かないこと(ホスト側が検証する)
 EOF
 )"

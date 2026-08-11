@@ -22,6 +22,7 @@
 | `issue_post_mode` | `create` / `update` |
 | `issue_target` | update 時の Issue |
 | `mcp_permission` | `ask` / `allow` / `deny` |
+| `mcp_permission_overrides` | 任意。`github=allow,playwright=deny` 形式（サーバ別 → OpenCode `permission.<server>_*`） |
 
 ### 解決優先順位（run-loop / init / doctor 等）
 

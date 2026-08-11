@@ -1,0 +1,20 @@
+name: deps-audit
+description: 対象プロジェクトの依存関係・サプライチェーン監査（outdated・既知脆弱性・lockfile衛生）を行い、発見事項とIssue・任意レポートを残す
+
+agent: opencode
+max_iterations: 15
+min_iterations: 2
+completion_promise: DEPS_AUDIT_COMPLETE
+
+# ホスト側 Issue 完了ゲート (run-loop.sh)
+require_issue: true
+seed_files: plan.md,findings.md
+
+prompt_file: prompt.md
+report_template: report-template.md
+
+# vendor/ecc から取り込む資材 (setup/sync-ecc-assets.sh --loop deps-audit)
+# security-audit と同系統。依存・サプライチェーンに焦点を絞ったプロンプト側の差分
+ecc_agents: security-reviewer,code-reviewer
+ecc_skills: security-review,production-audit
+ecc_rules: common

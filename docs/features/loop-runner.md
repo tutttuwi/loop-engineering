@@ -11,21 +11,20 @@
 ### できること
 
 - `--loop` で `loops/<name>/` を選択
-- `target.yaml` / `--target` / `--target-config` で対象解決
+- `target.yaml` / `--target` / `--target-config` / `--target-name` で対象解決
 - プロンプト `{{VAR}}` 展開 → OUTPUT_DIR に保存
 - Ralph（`--agent opencode`）で反復、`--completion-promise` で完了検知
 - `--dry-run`, `--max-iterations`, `--min-iterations`, `--model`, `--extra`
-- Issue モード `--issue-post-mode` / `--issue-target`
+- `--status` で対象プロジェクト上の Ralph 状態表示（`--loop` 不要）
+- Issue モード `--issue-post-mode` / `--issue-target` / `--issue-fallback` / `--skip-issue-gate`
+- `--post-report` / `--post-report-always`（[report-video-pipeline.md](./report-video-pipeline.md)）
+- `loop.yaml` の `seed_files` で進捗スタブを OUTPUT_DIR に用意（[bundled-loops.md](./bundled-loops.md)）
 
-### ギャップ
+### 完了判定
 
-| 約束 | 実態 |
-| --- | --- |
-| ヘッダコメントの `run-loop.sh --status` | **未実装**（引数パースに無し） |
-| README の status 案内 | Ralph を直接叩く手順のみ実質有効 |
-| 完了判定 | promise 文字列のみ。成果物チェックなし（→ Issue 文書） |
+promise 文字列に加え、`require_issue` 時はホストが `issue-url.txt` を検証する（[issue-posting.md](./issue-posting.md)）。
 
-## 要件定義（P0-4）
+## 要件定義（P0-4）— 実装済み
 
 ### FR-STATUS-1
 
@@ -33,45 +32,26 @@
 
 ### FR-STATUS-2
 
-対象パスの解決規則は通常実行と同じ（`--target` > `target.yaml` の `target_path`）。
-
-### FR-STATUS-3（代替許容）
-
-実装コストが高い場合、ヘッダ・README・SETUP から `--status` 約束を削除し、Ralph 直接呼び出しに統一してもよい。ただし「どちらか一方」に揃えること。
+対象パスの解決規則は通常実行と同じ（`--target` / `--target-config` / `--target-name` > `target.yaml`）。
 
 ### NFR
 
 - bash 3.2 互換を維持
 - submodule 未初期化時は既存と同様にエラーで案内
 
-## 設計
-
-### 推奨案 A: 薄いラッパー（推奨）
+## 設計（実装メモ）
 
 ```bash
-# run-loop.sh に --status 分岐を追加
+# run-loop.sh --status
 # 1. target_path を解決
 # 2. cd "$target_path"
 # 3. bun "$RALPH_ENTRY" --status
 ```
 
-- 追加依存なし
-- ユーザは常に `run-loop.sh` 経由で操作できる
-
-### 案 B: 文書削除
-
-- `run-loop.sh` ヘッダ、README、SETUP の `--status` 記述を削除
-- 進捗確認は `cd <target> && bun <ralph.ts> --status` のみ
-
-### 完了ゲートとの関係（将来）
-
-promise 検知後にホスト側で次を検証する拡張ポイントを `run-loop.sh` 末尾に置く（実装は [issue-posting.md](./issue-posting.md)）:
-
-1. `issue-url.txt` 存在（ループが要求する場合）
-2. 任意で `--post-report`（[report-video-pipeline.md](./report-video-pipeline.md)）
+promise 検知後のホスト検証（Issue / post-report）は `run-loop.sh` 末尾。
 
 ## 受け入れ条件
 
-- [ ] `--status` が動く **または** 全ドキュメントから約束が消えている
-- [ ] `usage()` とヘッダコメントが一致している
-- [ ] dry-run / 通常実行の回帰がない
+- [x] `--status` が動く
+- [x] `usage()` とヘッダコメントが一致している
+- [x] dry-run / 通常実行の回帰がない（smoke）

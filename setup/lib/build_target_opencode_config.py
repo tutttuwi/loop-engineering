@@ -17,6 +17,7 @@ setup/init-target-project.sh から環境変数経由で呼び出される。
   LOOP_ENABLE_SERENA         ... 1|0 (省略時: 1)
   LOOP_ENABLE_LSP            ... 1|0 (省略時: 1)
   LOOP_MCP_PERMISSION        ... ask|allow|deny (省略時: ask)
+  LOOP_MCP_PERMISSION_OVERRIDES ... github=allow,playwright=deny (省略時: 空)
 """
 from __future__ import annotations
 
@@ -26,7 +27,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from opencode_mcp_servers import apply_mcp_servers  # noqa: E402
+from opencode_mcp_servers import (  # noqa: E402
+    apply_mcp_servers,
+    parse_mcp_permission_overrides,
+)
 
 
 def _env_flag(name: str, default: bool = True) -> bool:
@@ -43,12 +47,21 @@ def _mcp_permission() -> str:
     return raw
 
 
+def _mcp_permission_overrides() -> dict[str, str]:
+    raw = os.environ.get("LOOP_MCP_PERMISSION_OVERRIDES") or ""
+    try:
+        return parse_mcp_permission_overrides(raw)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+
 target_json_path = Path(os.environ["LOOP_TARGET_OPENCODE_JSON"])
 base_url = os.environ["LOOP_BASE_URL"]
 model_id = os.environ["LOOP_MODEL_ID"]
 model_name = os.environ["LOOP_MODEL_NAME"]
 dest_root = os.environ.get("LOOP_DEST_ROOT", "loop-engineering")
 mcp_permission = _mcp_permission()
+mcp_permission_overrides = _mcp_permission_overrides()
 
 opencode_dir = target_json_path.parent
 agents_dir = opencode_dir / dest_root / "agents"
@@ -116,8 +129,17 @@ apply_mcp_servers(
     lsp=_env_flag("LOOP_ENABLE_LSP", True),
     mcp_permission=mcp_permission,
     force_mcp_permission=True,
+    mcp_permission_overrides=mcp_permission_overrides,
 )
 
 opencode_dir.mkdir(parents=True, exist_ok=True)
 target_json_path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-print(f"[OK] {target_json_path} を書き込みました (mcp_permission={mcp_permission})")
+override_label = (
+    ",".join(f"{k}={v}" for k, v in sorted(mcp_permission_overrides.items()))
+    if mcp_permission_overrides
+    else "-"
+)
+print(
+    f"[OK] {target_json_path} を書き込みました"
+    f" (mcp_permission={mcp_permission}, overrides={override_label})"
+)

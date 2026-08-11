@@ -80,7 +80,8 @@ cd tools/loop-engineering
 
 ```bash
 # ECCのcommonを取り込んだあと、独自ルールを追加
-./setup/sync-ecc-assets.sh --loop yabaiyo
+# 複数ループ併用時は使うループをすべて一度に指定
+./setup/sync-ecc-assets.sh --loop yabaiyo --loop monkey-test
 cat > project-config/rules/common/project-specific.md <<'EOF'
 # このプロダクト固有のレビュー観点
 - 決済フローの冪等性を必ず確認する
@@ -89,7 +90,7 @@ EOF
 
 # 再 sync しても project-specific.md は残る
 # (project-config/.ecc-sync-manifest 外のファイルはユーザー資産)
-./setup/sync-ecc-assets.sh --loop yabaiyo
+./setup/sync-ecc-assets.sh --loop yabaiyo --loop monkey-test
 
 # 対象プロジェクトへ再反映
 ./setup/init-target-project.sh
@@ -98,7 +99,8 @@ EOF
 基盤の一括更新:
 
 ```bash
-./setup/update.sh --loop yabaiyo --dry-run-loop yabaiyo
+./setup/update.sh --loop yabaiyo --loop monkey-test --dry-run-loop yabaiyo
+# または ./setup/update.sh --all-loops
 ```
 
 `init-target-project.sh` は `instructions` に `rules/**/*.md` を列挙するため、追加した Markdown は次回同期で OpenCode に読み込まれます。

@@ -56,8 +56,9 @@ cat <<'EOF'
   1) LM Studio でモデルをロードし、ローカルサーバーを起動してください
   2) cp project-config/target.yaml.example project-config/target.yaml
      を実行し、対象プロジェクトのパスなどを記入してください
-  3) ./setup/sync-ecc-assets.sh --loop <loop名> を実行し、ECCから必要な
+  3) ./setup/sync-ecc-assets.sh --loop <loop名> [--loop ...] を実行し、ECCから必要な
      agents/skills/rules を project-config/ に取り込んでください
+     （複数ループ併用時は使うループをすべて一度に指定。--all-loops も可）
   4) ./setup/init-target-project.sh
      を実行し、対象プロジェクトに opencode / MCP 設定を配置してください
      （target.yaml の target_path を使用。--target で上書き可）

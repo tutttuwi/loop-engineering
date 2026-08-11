@@ -17,22 +17,22 @@
 
 | 文書 | ステータス | 概要 |
 | --- | --- | --- |
-| [roadmap.md](./roadmap.md) | — | P0–P2 ロードマップと依存関係 |
+| [roadmap.md](./roadmap.md) | — | P0–P3 完了サマリ（残は需要ベース） |
 | [workspace-boundary.md](./workspace-boundary.md) | `done` | 対象PJ cwd・`.loop-engineering` ステージング |
 | [loop-runner.md](./loop-runner.md) | `done` | `run-loop`・Ralph・promise・dry-run・`--status` |
 | [target-config.md](./target-config.md) | `done` | `target.yaml`・`--target-name` レジストリ（P1-2 / P2-4） |
 | [opencode-init.md](./opencode-init.md) | `done` | init / configure・生成される設定（tmpl は参考のみ） |
-| [ecc-sync.md](./ecc-sync.md) | `done` | ECC抽出・カスタム保護（マニフェスト） |
+| [ecc-sync.md](./ecc-sync.md) | `done` | ECC抽出・カスタム保護・マルチループ和集合 |
 | [issue-posting.md](./issue-posting.md) | `done` | Issue create/update・完了ゲート・CLI代替 |
-| [permissions-unattended.md](./permissions-unattended.md) | `done` | ヘッドレス向け permission プロファイル |
-| [report-video-pipeline.md](./report-video-pipeline.md) | `partial` | Marp / ffmpeg / TTS（P1-3 / P2-2 / P2-3 done） |
+| [permissions-unattended.md](./permissions-unattended.md) | `done` | ヘッドレス向け permission（一括 + サーバ別） |
+| [report-video-pipeline.md](./report-video-pipeline.md) | `done` | Marp / `--post-report` smoke 固定（P3-3）。実 TTS/フル動画は運用依存 |
 | [doctor-and-setup.md](./doctor-and-setup.md) | `done` | doctor 強化・接続完了診断・TTS/Marp 案内 |
 | [porting-and-update.md](./porting-and-update.md) | `done` | 移植・`update.sh` ワンショット更新 |
 | [artifact-lifecycle.md](./artifact-lifecycle.md) | `done` | list-runs / clean-runs / latest |
-| [bundled-loops.md](./bundled-loops.md) | `done` | monkey-test / yabaiyo / pr-review / security-audit |
+| [bundled-loops.md](./bundled-loops.md) | `done` | monkey-test / yabaiyo / pr-review / security-audit / deps-audit |
 
 ## 読者別の読み方
 
-- **これから実装する**: [roadmap.md](./roadmap.md) → 各 `planned` / `partial` 文書の「要件定義」「設計」
+- **拡張の種を探す**: [roadmap.md](./roadmap.md)（P0–P3 完了）と各文書の残ギャップ・需要メモ
 - **現状の動きを知る**: `done` / `partial` の「現状」節と [../ARCHITECTURE.md](../ARCHITECTURE.md)
 - **移植・運用**: [porting-and-update.md](./porting-and-update.md) + [../PORTING.md](../PORTING.md)
