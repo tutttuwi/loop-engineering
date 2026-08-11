@@ -8,9 +8,9 @@
 ポータブルな「隣置き基盤」の骨格と、P0–P2 の運用ギャップはおおむね埋まっている。
 
 - setup → sync-ecc（マルチループ和集合）→ init → run-loop → 対象内成果物 → Marp/動画
-- ワークスペース境界（`.loop-engineering/`）、`--status`、`update.sh`、Issue 完了ゲート、permission プロファイル、doctor、smoke CI、成果物 list/clean、`security-audit` / `deps-audit` ループ
+- ワークスペース境界（`.loop-engineering/`）、`--status`、`update.sh`、Issue 完了ゲート、permission プロファイル、doctor（同梱ループ一覧）、smoke CI、成果物 list/clean、`security-audit` / `deps-audit` ループ
 
-P0–P3 のロードマップ項目は完了。以降は需要に応じた任意拡張のみ。詳細は下の **P3 / Remaining**。
+P0–P4 のロードマップ項目は完了。以降は需要ベース拡張。詳細は下の **P3 / Remaining** と **P4**。
 
 ## 優先度定義
 
@@ -20,6 +20,7 @@ P0–P3 のロードマップ項目は完了。以降は需要に応じた任意
 | P1 | 運用摩擦が大きいが回避可能 |
 | P2 | 品質・拡張・DX |
 | P3 | 任意・後回し（動くがまだ薄い／需要待ち） |
+| P4 | P3 後の薄い運用ギャップ（smoke / doctor 発見性など） |
 
 ## P0（完了）
 
@@ -66,6 +67,22 @@ P0–P3 のロードマップ項目は完了。以降は需要に応じた任意
 
 **完了済み（参照用）**: マルチループ ECC sync（`--loop` × N / `--all-loops` / `update.sh` 経由の和集合）— [ecc-sync.md](./ecc-sync.md)
 
+
+## P4（P3 後の薄いギャップ）
+
+P3 完了後に残る、発明ではなく既知の回帰・発見性ギャップ。
+
+| ID | 項目 | メモ |
+| --- | --- | --- |
+| P4-1 | `--all-loops` の smoke 固定 | **done** — 列挙に `deps-audit` を含み `_template` を除外、和集合スキルが揃うことを `./tests/smoke.sh` で検証（[ecc-sync.md](./ecc-sync.md)） |
+| P4-2 | 成果物 list/clean の smoke | **done** — 偽 RUN ツリーで `list-runs`（latest `*`）/ `clean-runs --dry-run` / `--keep N` を `./tests/smoke.sh` で固定（[artifact-lifecycle.md](./artifact-lifecycle.md)） |
+| P4-3 | doctor の同梱ループ一覧 | **done** — `doctor.sh` が `loops/*/loop.yaml` を列挙（`_template` 除外）。`./tests/smoke.sh` で既知ループを固定（[doctor-and-setup.md](./doctor-and-setup.md)） |
+| P4-4 | doctor 未 init 受け入れの smoke | **done** — 未 init target（`.opencode/opencode.json` 不在）で ERROR + 非ゼロを `./tests/smoke.sh` で固定（[doctor-and-setup.md](./doctor-and-setup.md)） |
+
+**P4 完了**（2026-08-11）。ロードマップ上の P4 項目はすべて done。
+
+**非目標（据え置き）**: ツール単位 MCP DSL、CI での実 Chromium/TTS/フル動画 e2e、需要のない新規製品ループ。
+
 ## 推奨実装順（履歴）
 
 ```mermaid
@@ -80,7 +97,7 @@ flowchart LR
   P1_5[P1-5 artifacts]
 ```
 
-P0–P3 は完了。以降の拡張は需要ベース（新ループは `_template` / `new-loop.sh`）。
+P0–P4 は完了。それ以外の拡張は需要ベース（新ループは `_template` / `new-loop.sh`）。
 
 ## 完了の定義（マイルストーン）
 

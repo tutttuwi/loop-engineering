@@ -2,9 +2,10 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ステータス | `done`（P1-5 list/clean/latest 実装済み） |
-| 関連実装 | なし（出力は `<target>/.loop-engineering/output/<loop>/<RUN_ID>/`） |
-| ロードマップ | P1-5 |
+| ステータス | `done`（P1-5 list/clean/latest + P4-2 smoke） |
+| 関連実装 | `engine/list-runs.sh` / `engine/clean-runs.sh`（出力は `<target>/.loop-engineering/output/<loop>/<RUN_ID>/`） |
+| ロードマップ | P1-5 / P4-2 |
+| 回帰 | `./tests/smoke.sh`（偽 RUN ツリーで list / keep / dry-run） |
 
 ## 背景
 
@@ -69,7 +70,7 @@ ln -sfn "$run_id" "${runtime_root}/output/${loop_name}/latest"
 
 ## 受け入れ条件
 
-- [ ] list で複数 RUN が見える
-- [ ] latest が最新 RUN を指す
-- [ ] clean --keep 5 で古いものが消え、latest は残る
-- [ ] clean --dry-run で削除しない
+- [x] list で複数 RUN が見える（smoke: `list-runs`）
+- [x] latest が最新 RUN を指す（smoke: LATEST 列 `*`）
+- [x] clean --keep N で古いものが消え、latest は残る（smoke: `--keep 2`）
+- [x] clean --dry-run で削除しない（smoke）

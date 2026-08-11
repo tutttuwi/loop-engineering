@@ -143,6 +143,26 @@ else
 fi
 
 echo ""
+echo "--- 同梱ループ ---------------------------------------------------------"
+# sync --all-loops と同じ契約: loops/*/loop.yaml を列挙し _template は除外
+bundled_loop_count=0
+for loop_yaml in "${ROOT_DIR}/loops"/*/loop.yaml; do
+  [[ -f "$loop_yaml" ]] || continue
+  loop_name="$(basename "$(dirname "$loop_yaml")")"
+  [[ "$loop_name" == "_template" ]] && continue
+  log_ok "loop: ${loop_name} (loops/${loop_name}/loop.yaml)"
+  ok_count=$((ok_count + 1))
+  bundled_loop_count=$((bundled_loop_count + 1))
+done
+if [[ "$bundled_loop_count" -eq 0 ]]; then
+  log_error "同梱ループがありません (loops/*/loop.yaml)。メタリポジトリを確認してください"
+  err_count=$((err_count + 1))
+else
+  log_ok "同梱ループ ${bundled_loop_count} 件 (_template 除外)"
+  ok_count=$((ok_count + 1))
+fi
+
+echo ""
 echo "--- Target readiness --------------------------------------------------"
 target_yaml="$(resolve_target_config "$target_config" "$target_registry_name")" || exit 1
 if [[ ! -f "$target_yaml" ]]; then

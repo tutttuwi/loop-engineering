@@ -575,6 +575,228 @@ else
   fail=$((fail + 1))
 fi
 
+# --- --all-loops discovery + union (P4-1) ---------------------------------
+echo ""
+echo "--- --all-loops discovery + union -------------------------------------"
+all_dest="${TMP_ROOT}/ecc-all"
+mkdir -p "$all_dest"
+set +e
+ECC_SYNC_DEST="$all_dest" "${ROOT_DIR}/setup/sync-ecc-assets.sh" --all-loops \
+  >"${TMP_ROOT}/ecc-all.out" 2>"${TMP_ROOT}/ecc-all.err"
+all_rc=$?
+set -e
+
+# 列挙ログに deps-audit があり _template は無い
+if [[ "$all_rc" -eq 0 ]] \
+  && grep -qE -- '--all-loops:.*deps-audit' "${TMP_ROOT}/ecc-all.err" \
+  && ! grep -q '_template' "${TMP_ROOT}/ecc-all.err"; then
+  log_ok "--all-loops discovers deps-audit (excludes _template)"
+  pass=$((pass + 1))
+else
+  log_error "--all-loops discovery missing deps-audit or includes _template (rc=${all_rc})"
+  sed -n '1,40p' "${TMP_ROOT}/ecc-all.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+# 同梱ループ由来の特徴スキルが和集合で揃うこと
+missing_skills=0
+for skill in e2e-testing security-review production-audit architecture-decision-records; do
+  if [[ ! -d "${all_dest}/skills/${skill}" ]]; then
+    log_error "--all-loops missing skill: ${skill}"
+    missing_skills=1
+  fi
+done
+if [[ "$missing_skills" -eq 0 ]]; then
+  log_ok "--all-loops union includes distinctive bundled skills"
+  pass=$((pass + 1))
+else
+  fail=$((fail + 1))
+fi
+
+if [[ -f "${all_dest}/.ecc-sync-manifest" ]] \
+  && grep -q 'skills/e2e-testing/' "${all_dest}/.ecc-sync-manifest" \
+  && grep -q 'skills/security-review/' "${all_dest}/.ecc-sync-manifest" \
+  && grep -q 'skills/production-audit/' "${all_dest}/.ecc-sync-manifest"; then
+  log_ok "--all-loops manifest lists union skills"
+  pass=$((pass + 1))
+else
+  log_error "--all-loops manifest incomplete"
+  fail=$((fail + 1))
+fi
+
+# --- artifact lifecycle: list-runs / clean-runs (P4-2) ---------------------
+echo ""
+echo "--- artifact lifecycle (list-runs / clean-runs) -----------------------"
+art_target="${TMP_ROOT}/artifact-target"
+art_loop="artifact-smoke"
+art_out="${art_target}/.loop-engineering/output/${art_loop}"
+mkdir -p "$art_out"
+# 新しい順に並べるため RUN_ID はタイムスタンプ風（sort -r で降順）
+for rid in 20260101_100000 20260102_100000 20260103_100000 20260104_100000 20260105_100000; do
+  mkdir -p "${art_out}/${rid}"
+  printf '# plan\n' >"${art_out}/${rid}/plan.md"
+  printf '# findings\n' >"${art_out}/${rid}/findings.md"
+done
+# 最新だけ pdf / issue を持ち、latest は相対 symlink
+printf '%%PDF-1.4\n' >"${art_out}/20260105_100000/report.pdf"
+printf 'https://github.com/example/smoke/issues/1\n' >"${art_out}/20260105_100000/issue-url.txt"
+(
+  cd "$art_out" || exit 1
+  ln -sfn "20260105_100000" latest
+)
+
+art_yaml="${TMP_ROOT}/artifact-target.yaml"
+cat >"$art_yaml" <<EOF
+target_path: ${art_target}
+target_name: artifact-smoke-target
+repo_provider: github
+repo_url: https://github.com/example/artifact-smoke
+default_branch: main
+issue_post_mode: create
+mcp_permission: ask
+EOF
+
+set +e
+"${ROOT_DIR}/engine/list-runs.sh" \
+  --target-config "$art_yaml" \
+  --loop "$art_loop" \
+  >"${TMP_ROOT}/list-runs.out" 2>"${TMP_ROOT}/list-runs.err"
+list_rc=$?
+set -e
+
+if [[ "$list_rc" -eq 0 ]] \
+  && grep -q '20260101_100000' "${TMP_ROOT}/list-runs.out" \
+  && grep -q '20260105_100000' "${TMP_ROOT}/list-runs.out" \
+  && grep -E '20260105_100000[[:space:]]+\*' "${TMP_ROOT}/list-runs.out" >/dev/null; then
+  log_ok "list-runs lists runs and marks latest (*)"
+  pass=$((pass + 1))
+else
+  log_error "list-runs listing / latest mark failed (rc=${list_rc})"
+  sed -n '1,40p' "${TMP_ROOT}/list-runs.out" >&2 || true
+  sed -n '1,20p' "${TMP_ROOT}/list-runs.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+# --keep 2 だと新しい順 index>2 が削除候補（latest は常に残す）
+# dry-run: 削除せずログのみ
+set +e
+"${ROOT_DIR}/engine/clean-runs.sh" \
+  --target-config "$art_yaml" \
+  --loop "$art_loop" \
+  --keep 2 \
+  --dry-run \
+  >"${TMP_ROOT}/clean-dry.out" 2>"${TMP_ROOT}/clean-dry.err"
+clean_dry_rc=$?
+set -e
+
+if [[ "$clean_dry_rc" -eq 0 ]] \
+  && grep -q '\[dry-run\] 削除予定:' "${TMP_ROOT}/clean-dry.err" \
+  && grep -q '20260101_100000' "${TMP_ROOT}/clean-dry.err" \
+  && grep -q '20260103_100000' "${TMP_ROOT}/clean-dry.err" \
+  && [[ -d "${art_out}/20260101_100000" ]] \
+  && [[ -d "${art_out}/20260103_100000" ]] \
+  && [[ -d "${art_out}/20260105_100000" ]]; then
+  log_ok "clean-runs --dry-run reports removals without deleting"
+  pass=$((pass + 1))
+else
+  log_error "clean-runs --dry-run behavior unexpected (rc=${clean_dry_rc})"
+  sed -n '1,40p' "${TMP_ROOT}/clean-dry.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+# 実削除: --keep 2 → 新しい 2 件 + latest 残存、古い 3 件削除
+set +e
+"${ROOT_DIR}/engine/clean-runs.sh" \
+  --target-config "$art_yaml" \
+  --loop "$art_loop" \
+  --keep 2 \
+  >"${TMP_ROOT}/clean-keep.out" 2>"${TMP_ROOT}/clean-keep.err"
+clean_keep_rc=$?
+set -e
+
+if [[ "$clean_keep_rc" -eq 0 ]] \
+  && [[ -d "${art_out}/20260105_100000" ]] \
+  && [[ -d "${art_out}/20260104_100000" ]] \
+  && [[ ! -d "${art_out}/20260103_100000" ]] \
+  && [[ ! -d "${art_out}/20260102_100000" ]] \
+  && [[ ! -d "${art_out}/20260101_100000" ]] \
+  && [[ -L "${art_out}/latest" ]] \
+  && [[ "$(readlink "${art_out}/latest")" == "20260105_100000" ]]; then
+  log_ok "clean-runs --keep 2 keeps newest 2 and latest symlink"
+  pass=$((pass + 1))
+else
+  log_error "clean-runs --keep 2 unexpected tree (rc=${clean_keep_rc})"
+  ls -la "$art_out" >&2 || true
+  sed -n '1,40p' "${TMP_ROOT}/clean-keep.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+# --- doctor bundled loop listing (P4-3) ------------------------------------
+echo ""
+echo "--- doctor bundled loop listing ---------------------------------------"
+# target 未整備でも同梱ループ節は出る（exit は ERROR になり得る）
+set +e
+"${ROOT_DIR}/setup/doctor.sh" \
+  --target-config "${TMP_ROOT}/doctor-missing-target.yaml" \
+  >"${TMP_ROOT}/doctor-loops.out" 2>"${TMP_ROOT}/doctor-loops.err"
+doctor_loops_rc=$?
+set -e
+
+doctor_loops_missing=0
+for loop in monkey-test yabaiyo pr-review security-audit deps-audit; do
+  if ! grep -qE "loop: ${loop} \(loops/${loop}/loop.yaml\)" "${TMP_ROOT}/doctor-loops.err"; then
+    log_error "doctor missing bundled loop: ${loop}"
+    doctor_loops_missing=1
+  fi
+done
+if [[ "$doctor_loops_missing" -eq 0 ]] \
+  && grep -qE '同梱ループ [0-9]+ 件 \(_template 除外\)' "${TMP_ROOT}/doctor-loops.err" \
+  && ! grep -qE 'loop: _template ' "${TMP_ROOT}/doctor-loops.err"; then
+  log_ok "doctor lists bundled loops (excludes _template)"
+  pass=$((pass + 1))
+else
+  log_error "doctor bundled loop listing unexpected (rc=${doctor_loops_rc})"
+  sed -n '1,80p' "${TMP_ROOT}/doctor-loops.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+# --- doctor not-initialized target (P4-4) ----------------------------------
+echo ""
+echo "--- doctor not-initialized target -------------------------------------"
+# target_path はあるが .opencode/opencode.json が無い = 未 init（doctor 契約）
+uninit_target="${TMP_ROOT}/uninit-target"
+mkdir -p "$uninit_target"
+rm -rf "${uninit_target}/.opencode"
+uninit_yaml="${TMP_ROOT}/uninit-target.yaml"
+cat >"$uninit_yaml" <<EOF
+target_path: ${uninit_target}
+target_name: uninit-smoke
+repo_provider: github
+repo_url: https://github.com/example/uninit-smoke
+default_branch: main
+issue_post_mode: create
+mcp_permission: ask
+EOF
+
+set +e
+"${ROOT_DIR}/setup/doctor.sh" \
+  --target-config "$uninit_yaml" \
+  >"${TMP_ROOT}/doctor-uninit.out" 2>"${TMP_ROOT}/doctor-uninit.err"
+doctor_uninit_rc=$?
+set -e
+
+# FR-DOC-1/2: 未 init は ERROR、ERROR>0 なら非ゼロ終了
+if [[ "$doctor_uninit_rc" -ne 0 ]] \
+  && grep -qE '未 init: .*\.opencode/opencode\.json がありません' "${TMP_ROOT}/doctor-uninit.err" \
+  && grep -q 'init-target-project.sh' "${TMP_ROOT}/doctor-uninit.err"; then
+  log_ok "doctor ERROR + non-zero exit when target not initialized"
+  pass=$((pass + 1))
+else
+  log_error "doctor not-init acceptance failed (rc=${doctor_uninit_rc})"
+  sed -n '1,100p' "${TMP_ROOT}/doctor-uninit.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
 # --- post-report / Marp (fixture + dry npx stub; no GPU/TTS/video) ----------
 echo ""
 echo "--- post-report / Marp ------------------------------------------------"

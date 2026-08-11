@@ -2,9 +2,9 @@
 
 | 項目 | 値 |
 | --- | --- |
-| ステータス | `done`（P0-3 Target/Auth 診断追加済み） |
+| ステータス | `done`（P0-3 Target/Auth + P4-3 同梱ループ一覧 + P4-4 未 init smoke） |
 | 関連実装 | `setup/doctor.sh`, `setup/install.sh` |
-| ロードマップ | P0-3 |
+| ロードマップ | P0-3 / P4-3 / P4-4 |
 
 ## 現状
 
@@ -12,6 +12,7 @@ doctor が見るもの（概略）:
 
 - bun / opencode / node / ffmpeg / python3 / git 等のコマンド
 - submodule（ralph / ecc）の存在
+- 同梱ループ一覧（`loops/*/loop.yaml`、`_template` 除外 — sync `--all-loops` と同契約）
 - LM Studio 疎通（任意・WARN）
 - Target readiness（`target.yaml` / init / mcp permission）
 - Auth / Issue readiness（token / gh / glab）
@@ -75,8 +76,32 @@ target 解決は `resolve_target_config` + `yaml_get` を再利用（`common.sh`
 [WARN]  mcp permission が ask です — 無人実行時は --mcp-permission allow
 ```
 
+## P4-3 同梱ループ一覧
+
+運用時にメタリポの同梱ループが見えると、`sync --all-loops` / `update.sh` の対象漏れを防ぎやすい。
+
+| 規則 | 内容 |
+| --- | --- |
+| 列挙 | `loops/*/loop.yaml` があるディレクトリ名 |
+| 除外 | `_template`（ひな形。製品ループではない） |
+| 出力 | `[ OK ] loop: <name> (loops/<name>/loop.yaml)` + 件数サマリ |
+| 0 件 | ERROR（メタリポ破損の可能性） |
+| 検証 | `./tests/smoke.sh` — monkey-test / yabaiyo / pr-review / security-audit / deps-audit を含み `_template` を出さない |
+
+## P4-4 未 init 受け入れ
+
+`target_path` は存在するが `<target>/.opencode/opencode.json` が無い状態を「未 init」とみなし、ループ実行不可として ERROR にする（FR-DOC-1）。
+
+| 規則 | 内容 |
+| --- | --- |
+| 判定 | `target_path` ディレクトリあり ∧ `.opencode/opencode.json` 不在 |
+| 出力 | `[ERROR] 未 init: <path> がありません。./setup/init-target-project.sh を実行してください` |
+| exit | ERROR≥1 なら非ゼロ（FR-DOC-2） |
+| 検証 | `./tests/smoke.sh` — 一時 target + `--target-config` で上記を固定 |
+
 ## 受け入れ条件
 
-- [ ] 未 init の target で doctor が ERROR を出す
+- [x] 未 init の target で doctor が ERROR を出し非ゼロ終了する（P4-4 / smoke）
 - [ ] PORTING チェックリストの主要項目が doctor でカバーされる
 - [ ] install.sh 経由でも新チェックが走る（または明示的に doctor 推奨）
+- [x] doctor が同梱ループを列挙し `_template` を除外する（P4-3 / smoke）

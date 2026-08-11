@@ -90,3 +90,4 @@ init / opencode `instructions` が両系を読むよう更新が必要（未採�
 - [x] 複数 `--loop` / `--all-loops` で和集合 sync できる
 - [x] PORTING / README / SETUP に方針が書かれている
 - [x] smoke で 2 ループ union + ユーザー資産保護を検証
+- [x] smoke で `--all-loops` が同梱ループ（`deps-audit` 含む）を列挙し `_template` を除外、和集合スキルを同期（P4-1）
