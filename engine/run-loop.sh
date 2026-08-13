@@ -13,6 +13,8 @@
 #   engine/run-loop.sh --status                       # 実行中ループの状態確認
 #   engine/run-loop.sh --list-targets                 # レジストリ一覧
 #   engine/run-loop.sh --loop monkey-test --dry-run    # プロンプトを生成して表示するだけ
+#   engine/run-loop.sh --loop yabaiyo --resume         # 前回 RUN (latest) の進捗を引き継いで起動
+#   engine/run-loop.sh --loop yabaiyo --resume-from 20260813-120000
 #
 # 終了コード契約(ホスト):
 #   0  成功(dry-run 含む。Issue ゲート通過 / skip / require_issue=false)
@@ -54,6 +56,8 @@ Usage:
   --post-report            Ralph成功後に report.md があれば PDF/動画を生成
   --post-report-always     Ralph失敗時もポスト処理を試みる(--post-report 含意)
   --dry-run                レンダリング後のプロンプトを表示するだけで実行しない
+  --resume                 同じループの前回 RUN (latest、無ければ最新) の進捗を引き継ぐ
+  --resume-from <RUN_ID>   指定 RUN_ID の進捗を引き継ぐ(--resume と排他)
   --status                 対象プロジェクト上の Ralph 状態を表示する(--loop 不要)
   --extra "<args>"         ralph CLIにそのまま追加で渡す引数
   -h, --help               このヘルプを表示
@@ -96,6 +100,8 @@ issue_target_override=""
 issue_fallback="none"
 skip_issue_gate=0
 dry_run=0
+resume_latest=0
+resume_from=""
 status_only=0
 list_targets_only=0
 post_report=0
@@ -106,6 +112,7 @@ RUN_META_STARTED_AT=""
 RUN_META_DRY_RUN="false"
 RUN_META_REQUIRE_ISSUE=""
 RUN_META_ISSUE_FALLBACK=""
+RUN_META_RESUMED_FROM=""
 
 _run_meta_finalize() {
   local ec="${1:-0}"
@@ -140,6 +147,15 @@ while [[ $# -gt 0 ]]; do
     --post-report) post_report=1; shift ;;
     --post-report-always) post_report=1; post_report_always=1; shift ;;
     --dry-run) dry_run=1; shift ;;
+    --resume) resume_latest=1; shift ;;
+    --resume-from)
+      if [[ -z "${2:-}" || "${2}" == -* ]]; then
+        log_error "--resume-from には RUN_ID が必要です"
+        exit 1
+      fi
+      resume_from="$2"
+      shift 2
+      ;;
     --status) status_only=1; shift ;;
     --extra) extra_args="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -213,11 +229,27 @@ seed_files_csv="$(yaml_get "$loop_yaml" "seed_files" "")"
 
 run_id="$(timestamp)"
 
+if [[ "$resume_latest" -eq 1 && -n "$resume_from" ]]; then
+  log_error "--resume と --resume-from は同時に指定できません"
+  exit 1
+fi
+
 # 成果物・レポート生成スクリプトは対象PJ内に置く。
 ensure_loop_engineering_gitignore "$target_path"
 stage_engine_lib_into_target "$target_path"
 runtime_root="${target_path}/.loop-engineering"
-output_dir="${runtime_root}/output/${loop_name}/${run_id}"
+loop_out_root="${runtime_root}/output/${loop_name}"
+output_dir="${loop_out_root}/${run_id}"
+
+resume_src=""
+resume_src_id=""
+if [[ "$resume_latest" -eq 1 || -n "$resume_from" ]]; then
+  # 新 OUTPUT_DIR を作る前に解決する(最新ディレクトリ判定が空の新RUNを拾わないように)
+  resume_src="$(resolve_resume_run_dir "$loop_out_root" "$resume_from")" || exit 1
+  resume_src_id="$(basename "$resume_src")"
+  RUN_META_RESUMED_FROM="$resume_src_id"
+fi
+
 mkdir -p "$output_dir"
 
 # 実行メタ(開始時点。終了時に trap で exit_code を確定)
@@ -231,6 +263,11 @@ export TARGET_PATH="$target_path"
 export RUN_ID="$run_id"
 export OUTPUT_DIR="$output_dir"
 write_run_meta_json "$RUN_META_PATH" "" || true
+
+# 前回 RUN の進捗をコピーしてからシード(既存ファイルは上書きしない)
+if [[ -n "$resume_src" ]]; then
+  inherit_run_artifacts "$resume_src" "$output_dir" "$seed_files_csv" || exit 1
+fi
 
 # 進捗ファイルのシード(初回 Read の File not found を減らす)
 ensure_seed_files "$output_dir" "$seed_files_csv" || exit 1
@@ -305,8 +342,23 @@ EOF
 )"
 fi
 
+export RESUME_FROM_RUN_ID="${resume_src_id:-}"
+
 rendered_prompt="${output_dir}/prompt.md"
 "${SCRIPT_DIR}/lib/render-prompt.sh" "$prompt_template" > "$rendered_prompt"
+
+if [[ -n "$resume_src_id" ]]; then
+  copied_csv=""
+  if [[ -f "${output_dir}/inherited-from.txt" ]]; then
+    copied_csv="$(grep -E '^copied=' "${output_dir}/inherited-from.txt" | head -n1 | sed -E 's/^copied=//')"
+  fi
+  resume_banner="$(build_resume_instructions "$resume_src_id" "$copied_csv")"
+  {
+    printf '%s\n\n' "$resume_banner"
+    cat "$rendered_prompt"
+  } >"${rendered_prompt}.tmp"
+  mv "${rendered_prompt}.tmp" "$rendered_prompt"
+fi
 
 log_info "ループ            : ${loop_name}"
 log_info "対象プロジェクト  : ${target_path} (${target_name})"
@@ -317,6 +369,9 @@ log_info "最大/最小イテレーション: ${max_iterations} / ${min_iteratio
 log_info "完了promise       : ${completion_promise}"
 log_info "生成プロンプト    : ${rendered_prompt}"
 log_info "出力先            : ${output_dir}"
+if [[ -n "$resume_src_id" ]]; then
+  log_info "引き継ぎ元        : ${resume_src_id} (${resume_src})"
+fi
 
 if [[ "$dry_run" -eq 1 ]]; then
   echo "----- レンダリング済みプロンプト (dry-run) -----"

@@ -490,6 +490,213 @@ else
   fail=$((fail + 1))
 fi
 
+# --- resume previous RUN ---------------------------------------------------
+echo ""
+echo "--- resume previous RUN -----------------------------------------------"
+resume_root="${TMP_ROOT}/resume-runs"
+mkdir -p "${resume_root}/20260101-100000" "${resume_root}/20260102-100000"
+printf 'OLD-FINDINGS\n' >"${resume_root}/20260102-100000/findings.md"
+printf 'OLD-PLAN\n' >"${resume_root}/20260102-100000/plan.md"
+printf 'OLD-PROMPT\n' >"${resume_root}/20260102-100000/prompt.md"
+printf '%%PDF-1.4\n' >"${resume_root}/20260102-100000/report.pdf"
+printf 'OLD-META\n' >"${resume_root}/20260102-100000/run-meta.json"
+mkdir -p "${resume_root}/20260102-100000/screenshots"
+printf 'PNG\n' >"${resume_root}/20260102-100000/screenshots/shot.png"
+printf 'STALE\n' >"${resume_root}/20260101-100000/findings.md"
+(
+  cd "$resume_root" || exit 1
+  ln -sfn "20260102-100000" latest
+)
+
+got_latest="$(resolve_resume_run_dir "$resume_root" "")"
+assert_eq "resolve latest via symlink" "$(basename "$got_latest")" "20260102-100000"
+got_explicit="$(resolve_resume_run_dir "$resume_root" "20260101-100000")"
+assert_eq "resolve explicit RUN_ID" "$(basename "$got_explicit")" "20260101-100000"
+got_latest_kw="$(resolve_resume_run_dir "$resume_root" "latest")"
+assert_eq "resolve RUN_ID=latest" "$(basename "$got_latest_kw")" "20260102-100000"
+assert_fail "reject missing RUN_ID" resolve_resume_run_dir "$resume_root" "no-such-run"
+assert_fail "reject path traversal RUN_ID" resolve_resume_run_dir "$resume_root" "../evil"
+assert_fail "reject missing loop output dir" resolve_resume_run_dir "${TMP_ROOT}/no-resume-root" ""
+
+resume_nolatest="${TMP_ROOT}/resume-nolatest"
+mkdir -p "${resume_nolatest}/20260101-100000" "${resume_nolatest}/20260103-100000"
+printf 'x\n' >"${resume_nolatest}/20260101-100000/findings.md"
+printf 'y\n' >"${resume_nolatest}/20260103-100000/findings.md"
+got_newest="$(resolve_resume_run_dir "$resume_nolatest" "")"
+assert_eq "resolve newest when latest missing" "$(basename "$got_newest")" "20260103-100000"
+
+resume_dst="${TMP_ROOT}/resume-dst"
+mkdir -p "$resume_dst"
+assert_ok "inherit_run_artifacts copies progress" \
+  inherit_run_artifacts "${resume_root}/20260102-100000" "$resume_dst" "findings.md,plan.md"
+assert_eq "inherited findings content" "$(cat "${resume_dst}/findings.md")" "OLD-FINDINGS"
+assert_eq "inherited plan content" "$(cat "${resume_dst}/plan.md")" "OLD-PLAN"
+assert_ok "inherited screenshots" test -f "${resume_dst}/screenshots/shot.png"
+assert_ok "inherited-from.txt written" test -f "${resume_dst}/inherited-from.txt"
+if grep -q 'source_run_id=20260102-100000' "${resume_dst}/inherited-from.txt"; then
+  log_ok "inherited-from.txt records source RUN_ID"
+  pass=$((pass + 1))
+else
+  log_error "inherited-from.txt missing source_run_id"
+  fail=$((fail + 1))
+fi
+assert_fail "did not copy prompt.md" test -f "${resume_dst}/prompt.md"
+assert_fail "did not copy report.pdf" test -f "${resume_dst}/report.pdf"
+assert_fail "did not copy run-meta.json" test -f "${resume_dst}/run-meta.json"
+
+assert_ok "ensure_seed after inherit keeps copied findings" \
+  ensure_seed_files "$resume_dst" "findings.md,plan.md,state.md"
+assert_eq "seed does not clobber inherited findings" "$(cat "${resume_dst}/findings.md")" "OLD-FINDINGS"
+assert_ok "seed still creates missing state.md" test -f "${resume_dst}/state.md"
+
+resume_int_target="${TMP_ROOT}/resume-int-target"
+mkdir -p "$resume_int_target"
+resume_int_yaml="${TMP_ROOT}/resume-int.yaml"
+cat >"$resume_int_yaml" <<EOF
+target_path: ${resume_int_target}
+target_name: resume-int
+repo_provider: github
+repo_url: https://github.com/example/resume-int
+default_branch: main
+issue_post_mode: create
+mcp_permission: ask
+EOF
+
+resume_prev="${resume_int_target}/.loop-engineering/output/yabaiyo/20260110-120000"
+mkdir -p "${resume_prev}/screenshots"
+printf 'RESUME-TOKEN-FINDINGS\n' >"${resume_prev}/findings.md"
+printf 'RESUME-TOKEN-PLAN\n' >"${resume_prev}/plan.md"
+printf 'https://github.com/example/resume-int/issues/9\n' >"${resume_prev}/issue-url.txt"
+printf 'OLD-PROMPT-SHOULD-NOT-COPY\n' >"${resume_prev}/prompt.md"
+printf '%%PDF-1.4\n' >"${resume_prev}/report.pdf"
+printf 'PNG\n' >"${resume_prev}/screenshots/keep.png"
+(
+  cd "$(dirname "$resume_prev")" || exit 1
+  ln -sfn "20260110-120000" latest
+)
+
+set +e
+"${ROOT_DIR}/engine/run-loop.sh" \
+  --loop yabaiyo \
+  --target-config "$resume_int_yaml" \
+  --resume \
+  --dry-run \
+  >"${TMP_ROOT}/resume-dry.out" 2>"${TMP_ROOT}/resume-dry.err"
+resume_dry_rc=$?
+set -e
+
+resume_new=""
+for d in "${resume_int_target}/.loop-engineering/output/yabaiyo"/*/; do
+  [[ -d "$d" ]] || continue
+  base="$(basename "$d")"
+  [[ "$base" == "latest" || "$base" == "20260110-120000" ]] && continue
+  resume_new="$d"
+done
+resume_new="${resume_new%/}"
+
+if [[ "$resume_dry_rc" -eq 0 ]] \
+  && [[ -n "$resume_new" ]] \
+  && grep -q 'RESUME-TOKEN-FINDINGS' "${resume_new}/findings.md" \
+  && grep -q 'RESUME-TOKEN-PLAN' "${resume_new}/plan.md" \
+  && grep -q 'issues/9' "${resume_new}/issue-url.txt" \
+  && [[ -f "${resume_new}/screenshots/keep.png" ]] \
+  && [[ ! -f "${resume_new}/report.pdf" ]] \
+  && ! grep -q 'OLD-PROMPT-SHOULD-NOT-COPY' "${resume_new}/prompt.md" \
+  && grep -q '前回 RUN からの引き継ぎ' "${resume_new}/prompt.md" \
+  && grep -q '20260110-120000' "${resume_new}/prompt.md" \
+  && grep -q '"resumed_from": "20260110-120000"' "${resume_new}/run-meta.json"; then
+  log_ok "run-loop --resume dry-run inherits progress and injects banner"
+  pass=$((pass + 1))
+else
+  log_error "run-loop --resume dry-run inherit failed (rc=${resume_dry_rc})"
+  sed -n '1,80p' "${TMP_ROOT}/resume-dry.err" >&2 || true
+  [[ -n "$resume_new" ]] && ls -la "$resume_new" >&2 || true
+  fail=$((fail + 1))
+fi
+
+set +e
+"${ROOT_DIR}/engine/run-loop.sh" \
+  --loop yabaiyo \
+  --target-config "$resume_int_yaml" \
+  --resume-from 20260110-120000 \
+  --dry-run \
+  >"${TMP_ROOT}/resume-from-dry.out" 2>"${TMP_ROOT}/resume-from-dry.err"
+resume_from_rc=$?
+set -e
+if [[ "$resume_from_rc" -eq 0 ]] \
+  && grep -q '引き継ぎ元' "${TMP_ROOT}/resume-from-dry.err"; then
+  log_ok "run-loop --resume-from dry-run succeeds"
+  pass=$((pass + 1))
+else
+  log_error "run-loop --resume-from dry-run failed (rc=${resume_from_rc})"
+  sed -n '1,40p' "${TMP_ROOT}/resume-from-dry.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+empty_target="${TMP_ROOT}/resume-empty-target"
+mkdir -p "$empty_target"
+empty_yaml="${TMP_ROOT}/resume-empty.yaml"
+cat >"$empty_yaml" <<EOF
+target_path: ${empty_target}
+target_name: resume-empty
+repo_provider: github
+repo_url: https://github.com/example/resume-empty
+default_branch: main
+issue_post_mode: create
+mcp_permission: ask
+EOF
+set +e
+"${ROOT_DIR}/engine/run-loop.sh" \
+  --loop yabaiyo \
+  --target-config "$empty_yaml" \
+  --resume \
+  --dry-run \
+  >"${TMP_ROOT}/resume-empty.out" 2>"${TMP_ROOT}/resume-empty.err"
+resume_empty_rc=$?
+set -e
+if [[ "$resume_empty_rc" -ne 0 ]]; then
+  log_ok "--resume with no previous RUN fails"
+  pass=$((pass + 1))
+else
+  log_error "expected non-zero --resume with no previous RUN"
+  fail=$((fail + 1))
+fi
+
+set +e
+"${ROOT_DIR}/engine/run-loop.sh" \
+  --loop yabaiyo \
+  --target-config "$resume_int_yaml" \
+  --resume \
+  --resume-from 20260110-120000 \
+  --dry-run \
+  >"${TMP_ROOT}/resume-both.out" 2>"${TMP_ROOT}/resume-both.err"
+resume_both_rc=$?
+set -e
+if [[ "$resume_both_rc" -ne 0 ]]; then
+  log_ok "--resume and --resume-from are mutually exclusive"
+  pass=$((pass + 1))
+else
+  log_error "expected non-zero when both --resume and --resume-from set"
+  fail=$((fail + 1))
+fi
+
+set +e
+"${ROOT_DIR}/engine/run-loop.sh" \
+  --loop yabaiyo \
+  --target-config "$resume_int_yaml" \
+  --resume-from '../evil' \
+  --dry-run \
+  >"${TMP_ROOT}/resume-evil.out" 2>"${TMP_ROOT}/resume-evil.err"
+resume_evil_rc=$?
+set -e
+if [[ "$resume_evil_rc" -ne 0 ]]; then
+  log_ok "--resume-from rejects path traversal"
+  pass=$((pass + 1))
+else
+  log_error "expected non-zero for --resume-from ../evil"
+  fail=$((fail + 1))
+fi
+
 # --- multi-loop ECC sync union ---------------------------------------------
 echo ""
 echo "--- multi-loop ECC sync union -----------------------------------------"

@@ -40,7 +40,7 @@
 ## 実行時の流れ（1ループ）
 
 1. `run-loop.sh` が `loops/<name>/loop.yaml` と `project-config/target.yaml` を読む
-2. 対象PJの `.loop-engineering/` に engine/lib を同期し、`output/<loop>/<RUN_ID>/` を作成
+2. 対象PJの `.loop-engineering/` に engine/lib を同期し、`output/<loop>/<RUN_ID>/` を作成（`--resume` 時は前回 RUN の進捗をコピーしてからシード）
 3. `prompt.md` の `{{VAR}}` を展開し、同ディレクトリの `prompt.md` に保存（`report-template.md` もコピー）
 4. 対象プロジェクトを cwd にして `bun vendor/open-ralph-wiggum/ralph.ts` を起動
 5. Ralph が同じプロンプトを OpenCode に繰り返し渡し、`<promise>...</promise>` を待つ

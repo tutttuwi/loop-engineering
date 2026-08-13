@@ -9,7 +9,7 @@
 ## 要件定義（共通）
 
 1. 各ループは `loop.yaml` + `prompt.md` + `report-template.md` + `README.md` を持つ
-2. 進捗を OUTPUT_DIR 上のファイルに残し、イテレーション再開可能であること
+2. 進捗を OUTPUT_DIR 上のファイルに残し、イテレーション再開可能であること。実行をまたぐ場合は `run-loop --resume`（[loop-runner.md](./loop-runner.md)）
 3. 完了時に `<promise>{{COMPLETION_PROMISE}}</promise>` を出力するよう指示すること
 4. Issue 投稿手順は `{{ISSUE_POST_INSTRUCTIONS}}` に従うこと
 5. 新規ループは `_template` / `new-loop.sh` で追加できること

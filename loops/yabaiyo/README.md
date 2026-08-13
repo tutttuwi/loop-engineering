@@ -18,6 +18,10 @@
 
 # 4. 実行する
 ./engine/run-loop.sh --loop yabaiyo --target /path/to/target-project --max-iterations 25
+
+# 前回の調査を続きから再開する
+# ./engine/run-loop.sh --loop yabaiyo --resume
+# ./engine/list-runs.sh --loop yabaiyo
 ```
 
 ## 出力

@@ -17,6 +17,7 @@
 5. 必要なら `./setup/sync-ecc-assets.sh --loop my-new-loop` でECCから資材を取り込む
 6. `./engine/run-loop.sh --loop my-new-loop --dry-run` でプロンプトを確認する
 7. `./engine/run-loop.sh --loop my-new-loop --target <path>` で実行する
+   - 前回 RUN から続ける場合: `./engine/run-loop.sh --loop my-new-loop --resume`
 
 ## 利用可能なテンプレート変数(`prompt.md` / `report-template.md` 内で使用可)
 
@@ -37,5 +38,6 @@
 | `{{ISSUE_POST_MODE}}` | `create` または `update` |
 | `{{ISSUE_TARGET}}` | update時の既存Issue番号/URL |
 | `{{ISSUE_POST_INSTRUCTIONS}}` | Issue投稿の具体的な手順文(モード別に展開済み) |
+| `{{RESUME_FROM_RUN_ID}}` | `--resume` 時の元 RUN_ID（未指定時は空。ホストがプロンプト先頭にもバナーを挿入する） |
 | `{{MONKEY_TEST_TARGET_URL}}` | モンキーテスト対象URL |
 | `{{PR_REVIEW_TARGET}}` | PR/MRレビュー対象 |

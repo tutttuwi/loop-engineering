@@ -27,6 +27,9 @@
 
 # 4. 実行する
 ./engine/run-loop.sh --loop monkey-test --target /path/to/target-project --max-iterations 25
+
+# 前回の操作記録・発見を続きから再開する
+# ./engine/run-loop.sh --loop monkey-test --resume
 ```
 
 ## 出力

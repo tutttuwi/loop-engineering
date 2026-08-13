@@ -166,6 +166,10 @@ git pull                                 # 任意
 ```bash
 ./engine/list-runs.sh --loop yabaiyo
 ./engine/clean-runs.sh --loop yabaiyo --keep 5 --dry-run
+
+# 前回 RUN の進捗（plan.md / findings.md 等）を引き継いで再実行
+./engine/run-loop.sh --loop yabaiyo --resume
+# ./engine/run-loop.sh --loop yabaiyo --resume-from 20260813-120000
 ```
 
 複数プロジェクトは `project-config/targets/<name>.yaml` + `--target-name <name>` で切り替え（詳細は [docs/PORTING.md](docs/PORTING.md)）。

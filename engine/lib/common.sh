@@ -234,7 +234,8 @@ validate_loop_dir() {
 # OUTPUT_DIR/run-meta.json を書き出す(P5-6)。
 # 使い方: write_run_meta_json <path> <exit_code>  ※他フィールドは環境変数/引数から
 # 必須環境: LOOP_NAME, TARGET_PATH, RUN_ID, OUTPUT_DIR
-# 任意: RUN_META_STARTED_AT, RUN_META_DRY_RUN, RUN_META_REQUIRE_ISSUE, RUN_META_ISSUE_FALLBACK
+# 任意: RUN_META_STARTED_AT, RUN_META_DRY_RUN, RUN_META_REQUIRE_ISSUE,
+#       RUN_META_ISSUE_FALLBACK, RUN_META_RESUMED_FROM
 write_run_meta_json() {
   local path="$1"
   local exit_code="${2:-}"
@@ -255,9 +256,10 @@ write_run_meta_json() {
     "${RUN_META_DRY_RUN:-false}" \
     "${RUN_META_REQUIRE_ISSUE:-}" \
     "${RUN_META_ISSUE_FALLBACK:-}" \
-    "${OUTPUT_DIR:-}" <<'PY'
+    "${OUTPUT_DIR:-}" \
+    "${RUN_META_RESUMED_FROM:-}" <<'PY'
 import json, sys
-path, loop, target, run_id, started, finished, exit_code, dry_run, require_issue, issue_fallback, output_dir = sys.argv[1:12]
+path, loop, target, run_id, started, finished, exit_code, dry_run, require_issue, issue_fallback, output_dir, resumed_from = sys.argv[1:13]
 meta = {
     "loop": loop,
     "target_path": target,
@@ -269,6 +271,8 @@ meta = {
     "require_issue": require_issue,
     "issue_fallback": issue_fallback,
 }
+if resumed_from:
+    meta["resumed_from"] = resumed_from
 if exit_code != "":
     try:
         meta["exit_code"] = int(exit_code)
@@ -482,6 +486,191 @@ ensure_seed_files() {
     log_info "進捗シード ${created} 件を用意しました (初回 Read の File not found を抑制)"
   fi
   return 0
+}
+
+# --- 前回 RUN の引き継ぎ --------------------------------------------------
+# RUN_ID は OUTPUT_DIR 直下のディレクトリ名のみ (パス区切り / '..' 禁止)。
+# latest / 空は symlink `latest`、無ければ名前順で最新の RUN ディレクトリ。
+#
+# 使い方: resolve_resume_run_dir <loop_out_root> [run_id]
+# 成功時: 引き継ぎ元ディレクトリの絶対パスを stdout に出す。
+resolve_resume_run_dir() {
+  local loop_out_root="$1"
+  local run_id="${2:-}"
+  local src="" base candidate latest_target
+
+  if [[ ! -d "$loop_out_root" ]]; then
+    log_error "引き継げる前回 RUN がありません: ${loop_out_root}"
+    log_error "  ./engine/list-runs.sh --loop <name> で確認してください"
+    return 1
+  fi
+
+  if [[ -n "$run_id" && "$run_id" != "latest" ]]; then
+    if ! printf '%s' "$run_id" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$'; then
+      log_error "RUN_ID が不正です(ディレクトリ名のみ): ${run_id}"
+      return 1
+    fi
+    src="${loop_out_root}/${run_id}"
+    if [[ ! -d "$src" ]]; then
+      log_error "指定した RUN が見つかりません: ${src}"
+      log_error "  ./engine/list-runs.sh --loop <name> で確認してください"
+      return 1
+    fi
+    (cd "$src" && pwd)
+    return 0
+  fi
+
+  if [[ -L "${loop_out_root}/latest" ]]; then
+    latest_target="$(readlink "${loop_out_root}/latest" || true)"
+    if [[ -n "$latest_target" && -d "${loop_out_root}/${latest_target}" ]]; then
+      src="${loop_out_root}/${latest_target}"
+    fi
+  elif [[ -d "${loop_out_root}/latest" ]]; then
+    src="${loop_out_root}/latest"
+  fi
+
+  if [[ -z "$src" ]]; then
+    local old_nullglob
+    old_nullglob="$(shopt -p nullglob || true)"
+    shopt -s nullglob
+    for candidate in "${loop_out_root}"/*/; do
+      [[ -d "$candidate" ]] || continue
+      base="$(basename "$candidate")"
+      [[ "$base" == "latest" ]] && continue
+      if [[ -z "$src" || "$base" > "$(basename "$src")" ]]; then
+        src="$candidate"
+      fi
+    done
+    eval "$old_nullglob" 2>/dev/null || shopt -u nullglob
+  fi
+
+  if [[ -z "$src" || ! -d "$src" ]]; then
+    log_error "引き継げる前回 RUN がありません: ${loop_out_root}"
+    log_error "  ./engine/list-runs.sh --loop <name> で確認してください"
+    return 1
+  fi
+  (cd "$src" && pwd)
+}
+
+# 引き継ぎでコピーしないファイル名 / 拡張子 / ディレクトリ。
+_resume_should_skip() {
+  local name="$1"
+  local is_dir="${2:-0}"
+  case "$name" in
+    prompt.md|report-template.md|run-meta.json|inherited-from.txt|.issue-body.md)
+      return 0
+      ;;
+    slides)
+      [[ "$is_dir" -eq 1 ]] && return 0
+      ;;
+  esac
+  case "$name" in
+    *.pdf|*.mp4|*.webm)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+# 前回 RUN の進捗ファイルを新 OUTPUT_DIR へコピーする。
+# 既存ファイルは上書きしない(シード後に呼ぶ場合の安全弁)。生成物(pdf/mp4/slides)と
+# ホストファイル(prompt / run-meta / report-template)はコピーしない。
+#
+# 使い方: inherit_run_artifacts <src_dir> <dst_dir> [seed_files_csv]
+# 副作用: dst/inherited-from.txt を書く。コピーした名前をログする。
+inherit_run_artifacts() {
+  local src_dir="$1"
+  local dst_dir="$2"
+  local seed_files_csv="${3:-}"
+  local name src_path dst_path copied="" copied_count=0 is_dir=0
+
+  if [[ -z "$src_dir" || ! -d "$src_dir" ]]; then
+    log_error "引き継ぎ元ディレクトリがありません: ${src_dir}"
+    return 1
+  fi
+  if [[ -z "$dst_dir" || ! -d "$dst_dir" ]]; then
+    log_error "引き継ぎ先ディレクトリがありません: ${dst_dir}"
+    return 1
+  fi
+  src_dir="$(cd "$src_dir" && pwd)"
+  dst_dir="$(cd "$dst_dir" && pwd)"
+  if [[ "$src_dir" == "$dst_dir" ]]; then
+    log_error "引き継ぎ元と先が同じです: ${src_dir}"
+    return 1
+  fi
+
+  local old_nullglob
+  old_nullglob="$(shopt -p nullglob || true)"
+  shopt -s nullglob
+  for src_path in "$src_dir"/* "$src_dir"/.[!.]*; do
+    [[ -e "$src_path" ]] || continue
+    name="$(basename "$src_path")"
+    [[ "$name" == "." || "$name" == ".." ]] && continue
+    is_dir=0
+    [[ -d "$src_path" ]] && is_dir=1
+    if _resume_should_skip "$name" "$is_dir"; then
+      continue
+    fi
+    # ディレクトリは進捗用(screenshots 等)のみ。slides は上で skip。
+    if [[ "$is_dir" -eq 1 ]]; then
+      case "$name" in
+        screenshots) ;;
+        *) continue ;;
+      esac
+    fi
+    dst_path="${dst_dir}/${name}"
+    if [[ -e "$dst_path" ]]; then
+      continue
+    fi
+    if [[ "$is_dir" -eq 1 ]]; then
+      cp -R "$src_path" "$dst_path"
+    else
+      cp -f "$src_path" "$dst_path"
+    fi
+    copied_count=$((copied_count + 1))
+    if [[ -z "$copied" ]]; then
+      copied="$name"
+    else
+      copied="${copied},${name}"
+    fi
+  done
+  eval "$old_nullglob" 2>/dev/null || shopt -u nullglob
+
+  # seed_files にありソースにあって、上の glob で拾えなかったものは無い想定。
+  # csv はログ用に残すだけ。
+  {
+    printf 'source_run_id=%s\n' "$(basename "$src_dir")"
+    printf 'source_path=%s\n' "$src_dir"
+    printf 'copied=%s\n' "$copied"
+    printf 'seed_files=%s\n' "$seed_files_csv"
+  } >"${dst_dir}/inherited-from.txt"
+
+  if [[ "$copied_count" -eq 0 ]]; then
+    log_warn "引き継ぎ対象の進捗ファイルがありませんでした: ${src_dir}"
+  else
+    log_info "引き継いだファイル: ${copied}"
+  fi
+  return 0
+}
+
+# エージェント向けの引き継ぎバナー。stdout に出す。
+# 使い方: build_resume_instructions <source_run_id> [copied_csv]
+build_resume_instructions() {
+  local source_run_id="$1"
+  local copied="${2:-}"
+  local copied_line="(inherited-from.txt を参照)"
+  [[ -n "$copied" ]] && copied_line="$copied"
+  cat <<EOF
+## 前回 RUN からの引き継ぎ
+
+この実行は前回 RUN \`${source_run_id}\` の進捗ファイルを OUTPUT_DIR にコピー済みです。
+コピーしたもの: ${copied_line}
+
+- 既存の計画・発見・メモ・Issue URL は消さず、未完了項目から再開してください。
+- すでに完了した調査を最初からやり直さないでください。
+- plan.md / state.md が既に埋まっている場合はそれを尊重し、空のときだけ新規計画を立ててください。
+- report.md / スライド / 動画は今回の OUTPUT_DIR 向けに更新または新規作成してください。
+EOF
 }
 
 # issue-url.txt が非空で http(s) URL らしいか検証する。成功で 0。

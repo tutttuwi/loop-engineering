@@ -19,7 +19,7 @@
 | --- | --- | --- |
 | [roadmap.md](./roadmap.md) | — | P0–P5 完了。据え置きは roadmap の「据え置き」参照 |
 | [workspace-boundary.md](./workspace-boundary.md) | `done` | 対象PJ cwd・`.loop-engineering` ステージング・健全性（P5-8） |
-| [loop-runner.md](./loop-runner.md) | `done` | `run-loop`・Ralph・promise・dry-run・`--status`・`run-meta.json`（P5-6） |
+| [loop-runner.md](./loop-runner.md) | `done` | `run-loop`・Ralph・promise・dry-run・`--status`・`run-meta.json`・`--resume` |
 | [target-config.md](./target-config.md) | `done` | `target.yaml`・`--target-name` / `--list-targets`（P2-4 / P5-2） |
 | [opencode-init.md](./opencode-init.md) | `done` | init / configure・生成される設定（tmpl は参考のみ） |
 | [ecc-sync.md](./ecc-sync.md) | `done` | ECC抽出・カスタム保護・マルチループ和集合 |
