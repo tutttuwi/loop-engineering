@@ -1,18 +1,20 @@
 name: monkey-test
-description: フロントエンド/モバイルアプリの画面構成を把握したうえで、Playwrightによる例外操作を繰り返し検証するモンキーテストループ
+description: 対象アプリのユーザー種別・アクセス権・構造とユースケースを解析し、多様なペルソナで業務フローと例外操作を検証するモンキーテストループ
 
 agent: opencode
 max_iterations: 25
-min_iterations: 3
+min_iterations: 5
 completion_promise: MONKEY_TEST_COMPLETE
 
 require_issue: true
-seed_files: state.md,findings.md
+seed_files: state.md,app-model.md,scenarios.md,findings.md
 
 prompt_file: prompt.md
 report_template: report-template.md
 
 # vendor/ecc から取り込む資材 (setup/sync-ecc-assets.sh --loop monkey-test)
+# persona-driven-qa は ECC 由来ではないため ecc_skills に含めない
+# （project-config/skills/persona-driven-qa を init が対象へコピーする）
 ecc_agents: e2e-runner,architect
 ecc_skills: e2e-testing,frontend-patterns,browser-qa
 ecc_rules: common,web

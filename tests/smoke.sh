@@ -471,6 +471,16 @@ printf 'keep-me\n' >"${seed_dir}/findings.md"
 assert_ok "ensure_seed_files idempotent" ensure_seed_files "$seed_dir" "findings.md,state.md"
 assert_eq "seed does not overwrite" "$(cat "${seed_dir}/findings.md")" "keep-me"
 assert_ok "seed creates missing sibling" test -f "${seed_dir}/state.md"
+assert_ok "ensure_seed_files app-model+scenarios" ensure_seed_files "$seed_dir" "app-model.md,scenarios.md"
+if grep -q 'フェーズ進捗' "${seed_dir}/state.md" \
+  && grep -q 'アクセス制御マトリクス' "${seed_dir}/app-model.md" \
+  && grep -q 'テストカタログ' "${seed_dir}/scenarios.md"; then
+  log_ok "monkey-test analysis seed stubs have typed content"
+  pass=$((pass + 1))
+else
+  log_error "monkey-test analysis seed stubs missing expected headings"
+  fail=$((fail + 1))
+fi
 assert_fail "reject path traversal seed" ensure_seed_files "$seed_dir" "../evil.md"
 assert_fail "reject absolute seed" ensure_seed_files "$seed_dir" "/tmp/evil.md"
 assert_fail "reject nested seed path" ensure_seed_files "$seed_dir" "sub/findings.md"
@@ -482,11 +492,62 @@ seed_run_dir="$(find "${target_dir}/.loop-engineering/output/monkey-test" -minde
 if [[ -n "$seed_run_dir" ]] \
   && [[ -f "${seed_run_dir}/state.md" ]] \
   && [[ -f "${seed_run_dir}/findings.md" ]] \
-  && grep -q '画面一覧' "${seed_run_dir}/state.md"; then
-  log_ok "dry-run seeded monkey-test state.md+findings.md"
+  && [[ -f "${seed_run_dir}/app-model.md" ]] \
+  && [[ -f "${seed_run_dir}/scenarios.md" ]] \
+  && grep -q '画面一覧' "${seed_run_dir}/state.md" \
+  && grep -q 'フェーズ進捗' "${seed_run_dir}/state.md" \
+  && grep -q 'アクセス制御マトリクス' "${seed_run_dir}/app-model.md" \
+  && grep -q 'テストカタログ' "${seed_run_dir}/scenarios.md"; then
+  log_ok "dry-run seeded monkey-test analysis+progress files"
   pass=$((pass + 1))
 else
   log_error "dry-run did not seed monkey-test progress files"
+  fail=$((fail + 1))
+fi
+
+if [[ -n "$seed_run_dir" ]] \
+  && grep -q 'フェーズA' "${seed_run_dir}/prompt.md" \
+  && grep -q '多様なペルソナ' "${seed_run_dir}/prompt.md" \
+  && grep -q 'app-model.md' "${seed_run_dir}/prompt.md" \
+  && grep -q 'scenarios.md' "${seed_run_dir}/prompt.md" \
+  && grep -q 'アクセス制御マトリクス' "${seed_run_dir}/prompt.md"; then
+  log_ok "monkey-test prompt requires analysis then personas"
+  pass=$((pass + 1))
+else
+  log_error "monkey-test prompt missing analysis/persona phases"
+  fail=$((fail + 1))
+fi
+
+# monkey_test_accounts がプロンプトへ展開されること
+acct_yaml="${TMP_ROOT}/target-accounts.yaml"
+cat >"$acct_yaml" <<EOF
+target_path: ${target_dir}
+target_name: smoke-accounts
+repo_provider: github
+repo_url: https://github.com/example/smoke
+default_branch: main
+issue_post_mode: create
+mcp_permission: ask
+monkey_test_target_url: http://localhost:3000
+monkey_test_accounts: guest,member|user@example.com|test-pass,admin|admin@example.com|test-pass
+EOF
+set +e
+"${ROOT_DIR}/engine/run-loop.sh" \
+  --loop monkey-test \
+  --target-config "$acct_yaml" \
+  --dry-run \
+  >"${TMP_ROOT}/dry-acct.out" 2>"${TMP_ROOT}/dry-acct.err"
+acct_rc=$?
+set -e
+acct_prompt="$(ls -1t "${target_dir}/.loop-engineering/output/monkey-test"/*/prompt.md 2>/dev/null | head -n1)"
+if [[ "$acct_rc" -eq 0 ]] \
+  && [[ -n "$acct_prompt" ]] \
+  && grep -Fq 'guest,member|user@example.com|test-pass,admin|admin@example.com|test-pass' "$acct_prompt"; then
+  log_ok "monkey_test_accounts rendered into prompt"
+  pass=$((pass + 1))
+else
+  log_error "monkey_test_accounts not rendered (rc=${acct_rc})"
+  sed -n '1,40p' "${TMP_ROOT}/dry-acct.err" >&2 || true
   fail=$((fail + 1))
 fi
 
@@ -497,6 +558,8 @@ resume_root="${TMP_ROOT}/resume-runs"
 mkdir -p "${resume_root}/20260101-100000" "${resume_root}/20260102-100000"
 printf 'OLD-FINDINGS\n' >"${resume_root}/20260102-100000/findings.md"
 printf 'OLD-PLAN\n' >"${resume_root}/20260102-100000/plan.md"
+printf 'OLD-APP-MODEL\n' >"${resume_root}/20260102-100000/app-model.md"
+printf 'OLD-SCENARIOS\n' >"${resume_root}/20260102-100000/scenarios.md"
 printf 'OLD-PROMPT\n' >"${resume_root}/20260102-100000/prompt.md"
 printf '%%PDF-1.4\n' >"${resume_root}/20260102-100000/report.pdf"
 printf 'OLD-META\n' >"${resume_root}/20260102-100000/run-meta.json"
@@ -531,6 +594,8 @@ assert_ok "inherit_run_artifacts copies progress" \
   inherit_run_artifacts "${resume_root}/20260102-100000" "$resume_dst" "findings.md,plan.md"
 assert_eq "inherited findings content" "$(cat "${resume_dst}/findings.md")" "OLD-FINDINGS"
 assert_eq "inherited plan content" "$(cat "${resume_dst}/plan.md")" "OLD-PLAN"
+assert_eq "inherited app-model content" "$(cat "${resume_dst}/app-model.md")" "OLD-APP-MODEL"
+assert_eq "inherited scenarios content" "$(cat "${resume_dst}/scenarios.md")" "OLD-SCENARIOS"
 assert_ok "inherited screenshots" test -f "${resume_dst}/screenshots/shot.png"
 assert_ok "inherited-from.txt written" test -f "${resume_dst}/inherited-from.txt"
 if grep -q 'source_run_id=20260102-100000' "${resume_dst}/inherited-from.txt"; then
@@ -1436,12 +1501,28 @@ else
   sed -n '1,120p' "${TMP_ROOT}/upd-ok.err" >&2 || true
   fail=$((fail + 1))
 fi
+if [[ -f "${upd_target}/.opencode/loop-engineering/skills/persona-driven-qa/SKILL.md" ]]; then
+  log_ok "init copies persona-driven-qa skill into target"
+  pass=$((pass + 1))
+else
+  log_error "persona-driven-qa skill not copied by init"
+  fail=$((fail + 1))
+fi
 
 # --- P5-5: loop.yaml validate + new-loop -----------------------------------
 echo ""
 echo "--- P5-5 loop validate + new-loop -------------------------------------"
 assert_ok "validate bundled yabaiyo" validate_loop_dir "${ROOT_DIR}/loops/yabaiyo"
 assert_ok "validate bundled monkey-test" validate_loop_dir "${ROOT_DIR}/loops/monkey-test"
+if grep -q 'seed_files: state.md,app-model.md,scenarios.md,findings.md' "${ROOT_DIR}/loops/monkey-test/loop.yaml" \
+  && grep -q 'min_iterations: 5' "${ROOT_DIR}/loops/monkey-test/loop.yaml" \
+  && [[ -f "${ROOT_DIR}/project-config/skills/persona-driven-qa/SKILL.md" ]]; then
+  log_ok "monkey-test loop.yaml analysis seed_files + persona skill"
+  pass=$((pass + 1))
+else
+  log_error "monkey-test loop.yaml or persona-driven-qa skill missing expected analysis contract"
+  fail=$((fail + 1))
+fi
 
 broken_dir="${TMP_ROOT}/broken-loop"
 mkdir -p "$broken_dir"

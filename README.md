@@ -8,7 +8,7 @@
 
 | ループ | 概要 | 成果物 |
 | --- | --- | --- |
-| `monkey-test` | Playwright で例外操作を繰り返し、仕様/設計の逸脱を検出 | findings / スライド / 動画 / Issue |
+| `monkey-test` | ユーザー種別・権限・業務フローを解析し、多様なペルソナで探索的テスト | findings / スライド / 動画 / Issue |
 | `yabaiyo` | 計画→コード精査で設計・実装の「ヤバい」箇所を収集 | findings / スライド / 動画 / Issue |
 | `pr-review` | 特定の MR/PR を読み解き、インライン＋総括レビューを投稿 | review-notes / コメント / Issue |
 | `security-audit` | セキュリティ監査（OWASP・秘密情報・認証認可・依存関係） | findings / スライド / 動画 / Issue |
@@ -186,7 +186,7 @@ git pull                                 # 任意
 
 # 3. 対象プロジェクトを指定
 cp project-config/target.yaml.example project-config/target.yaml
-# → target_path / repo_url / monkey_test_target_url などを編集
+# → target_path / repo_url / monkey_test_target_url / monkey_test_accounts などを編集
 
 # 4. ECC資材の取り込み + 対象プロジェクトへ接続
 #    ※ ここで <target>/.opencode/opencode.json に LM Studio / MCP が入る
