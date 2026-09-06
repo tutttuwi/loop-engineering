@@ -1369,6 +1369,12 @@ cat >"${fb_bin}/bun" <<'BUNEOF'
 exit 0
 BUNEOF
 chmod +x "${fb_bin}/bun"
+# run-loop は Ralph 起動前にエージェント CLI を確認する
+cat >"${fb_bin}/opencode" <<'OCEOF'
+#!/usr/bin/env bash
+exit 0
+OCEOF
+chmod +x "${fb_bin}/opencode"
 cp "${issue_bin}/gh" "${fb_bin}/gh"
 chmod +x "${fb_bin}/gh"
 
