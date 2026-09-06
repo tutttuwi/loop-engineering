@@ -217,3 +217,55 @@ EOF
     "$ts" "$loop_name" "$run_id" "$autonomy" "$dry_run" "${exit_code:-pending}" "$resumed_from" \
     >>"$log_path"
 }
+
+_WORKTREE_GATE_PY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/worktree_gate.py"
+
+# 対象ツリーの実行前スナップショット。
+# 使い方: snapshot_target_worktree <target_path> <snapshot_file>
+snapshot_target_worktree() {
+  local target="$1"
+  local dest="$2"
+  require_cmd python3 "https://www.python.org/ からインストールしてください"
+  python3 "$_WORKTREE_GATE_PY" snapshot --target "$target" --out "$dest"
+}
+
+# L0/L1 のソース改変・denylist・(L2/L3) maxFiles を機械検査する。
+# 使い方: enforce_worktree_gate <target> <snapshot> <level> <gate.yaml> [report]
+# 成功: 0 / 違反: 1
+enforce_worktree_gate() {
+  local target="$1"
+  local snapshot="$2"
+  local level="${3:-L1}"
+  local gate_file="$4"
+  local report="${5:-}"
+  local args
+  require_cmd python3 "https://www.python.org/ からインストールしてください"
+  if [[ ! -f "$snapshot" ]]; then
+    log_error "worktree スナップショットがありません: ${snapshot}"
+    return 1
+  fi
+  args=(python3 "$_WORKTREE_GATE_PY" enforce
+    --target "$target"
+    --snapshot "$snapshot"
+    --level "$level"
+    --gate-file "$gate_file")
+  if [[ -n "$report" ]]; then
+    args+=(--report "$report")
+  fi
+  if "${args[@]}"; then
+    log_ok "worktree ゲート通過 (autonomy=${level})"
+    return 0
+  fi
+  log_error "worktree ゲートに失敗しました (autonomy=${level})"
+  log_error "  参考: vendor/cobusgreyling-loop-engineering/tools/loop-gate （denylist / maxFiles）"
+  log_error "  スキップ: --skip-worktree-gate または LOOP_SKIP_WORKTREE_GATE=1"
+  return 1
+}
+
+path_matches_glob() {
+  local path="$1"
+  local pattern="$2"
+  local got
+  got="$(python3 "$_WORKTREE_GATE_PY" match-glob --path "$path" --pattern "$pattern")"
+  [[ "$got" == "yes" ]]
+}

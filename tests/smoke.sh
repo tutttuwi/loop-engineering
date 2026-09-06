@@ -1742,6 +1742,108 @@ else
 fi
 
 echo ""
+echo "--- worktree gate (L1 / denylist) -------------------------------------"
+assert_ok "glob **/.env matches .env" path_matches_glob ".env" "**/.env"
+assert_ok "glob **/.env matches nested" path_matches_glob "cfg/.env" "**/.env"
+assert_fail "glob **/.env rejects .env.local" path_matches_glob ".env.local" "**/.env"
+assert_ok "glob **/.env.* matches .env.local" path_matches_glob ".env.local" "**/.env.*"
+assert_ok "glob **/auth/** matches src/auth/x" path_matches_glob "src/auth/login.py" "**/auth/**"
+assert_fail "glob **/auth/** rejects authorize.py" path_matches_glob "src/authorize.py" "**/auth/**"
+
+wt_root="${TMP_ROOT}/wt-tree"
+mkdir -p "${wt_root}/src" "${wt_root}/.loop-engineering/out"
+printf 'orig\n' >"${wt_root}/src/app.py"
+wt_snap="${TMP_ROOT}/wt-snap.tsv"
+assert_ok "snapshot worktree" snapshot_target_worktree "$wt_root" "$wt_snap"
+printf 'runtime\n' >"${wt_root}/.loop-engineering/out/findings.md"
+assert_ok "L1 allows runtime-only writes" \
+  enforce_worktree_gate "$wt_root" "$wt_snap" "L1" "${ROOT_DIR}/gate.yaml" "${TMP_ROOT}/wt-ok.txt"
+printf 'pwned\n' >"${wt_root}/src/app.py"
+assert_fail "L1 rejects source edit" \
+  enforce_worktree_gate "$wt_root" "$wt_snap" "L1" "${ROOT_DIR}/gate.yaml" "${TMP_ROOT}/wt-l1.txt"
+if grep -q 'trigger: l1-source' "${TMP_ROOT}/wt-l1.txt"; then
+  log_ok "L1 violation report records l1-source"
+  pass=$((pass + 1))
+else
+  log_error "L1 report missing l1-source trigger"
+  fail=$((fail + 1))
+fi
+printf 'orig\n' >"${wt_root}/src/app.py"
+printf 'secret\n' >"${wt_root}/.env"
+assert_fail "denylist rejects .env even at L2" \
+  enforce_worktree_gate "$wt_root" "$wt_snap" "L2" "${ROOT_DIR}/gate.yaml" "${TMP_ROOT}/wt-den.txt"
+if grep -q 'trigger: denylist' "${TMP_ROOT}/wt-den.txt"; then
+  log_ok "denylist violation report records denylist"
+  pass=$((pass + 1))
+else
+  log_error "denylist report missing trigger"
+  fail=$((fail + 1))
+fi
+
+wt_run_target="${TMP_ROOT}/wt-run-target"
+mkdir -p "${wt_run_target}/src" "${wt_run_target}/.opencode"
+printf '{}\n' >"${wt_run_target}/.opencode/opencode.json"
+printf 'clean\n' >"${wt_run_target}/src/app.py"
+wt_run_yaml="${TMP_ROOT}/wt-run.yaml"
+cat >"$wt_run_yaml" <<EOF
+target_path: ${wt_run_target}
+target_name: wt-run
+repo_provider: github
+repo_url: https://github.com/example/wt-run
+default_branch: main
+issue_post_mode: create
+mcp_permission: ask
+EOF
+wt_bin="${TMP_ROOT}/wt-bin"
+mkdir -p "$wt_bin"
+cat >"${wt_bin}/bun" <<'EOF'
+#!/usr/bin/env bash
+printf 'pwned-by-ralph\n' > src/app.py
+exit 0
+EOF
+chmod +x "${wt_bin}/bun"
+set +e
+PATH="${wt_bin}:${PATH}" \
+  "${ROOT_DIR}/engine/run-loop.sh" \
+    --loop monkey-test \
+    --target-config "$wt_run_yaml" \
+    --skip-issue-gate \
+  >"${TMP_ROOT}/wt-run.out" 2>"${TMP_ROOT}/wt-run.err"
+wt_run_rc=$?
+set -e
+wt_viol="$(find "${wt_run_target}/.loop-engineering/output/monkey-test" -name worktree-violations.txt 2>/dev/null | head -n1)"
+if [[ "$wt_run_rc" -ne 0 ]] \
+  && [[ -n "$wt_viol" ]] \
+  && grep -q 'trigger: l1-source' "$wt_viol"; then
+  log_ok "run-loop L1 worktree gate blocks source edit (stub bun)"
+  pass=$((pass + 1))
+else
+  log_error "run-loop L1 worktree gate did not block (rc=${wt_run_rc})"
+  sed -n '1,60p' "${TMP_ROOT}/wt-run.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+printf 'clean\n' >"${wt_run_target}/src/app.py"
+set +e
+PATH="${wt_bin}:${PATH}" \
+  "${ROOT_DIR}/engine/run-loop.sh" \
+    --loop monkey-test \
+    --target-config "$wt_run_yaml" \
+    --skip-issue-gate \
+    --skip-worktree-gate \
+  >"${TMP_ROOT}/wt-skip.out" 2>"${TMP_ROOT}/wt-skip.err"
+wt_skip_rc=$?
+set -e
+if [[ "$wt_skip_rc" -eq 0 ]]; then
+  log_ok "--skip-worktree-gate bypasses L1 source check"
+  pass=$((pass + 1))
+else
+  log_error "--skip-worktree-gate still failed (rc=${wt_skip_rc})"
+  sed -n '1,40p' "${TMP_ROOT}/wt-skip.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+echo ""
 echo "==================================================================="
 echo " 結果: PASS=${pass} FAIL=${fail}"
 echo "==================================================================="

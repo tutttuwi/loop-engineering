@@ -27,7 +27,7 @@ cobusgreyling 側はパターンライブラリ（スケジュール、STATE、L
 
 | 参考コンセプト | このリポジトリ |
 | --- | --- |
-| L1–L3 | `loop.yaml` の `autonomy_level` + `engine/lib/gate.sh` |
+| loop-gate / denylist | `engine/lib/worktree_gate.py` + `gate.yaml`（L1 ソース改変も検査） |
 | Kill switch | `LOOP_PAUSE_ALL` / `.loop-pause` |
 | STATE.md | リポジトリルート（基盤自身）と各 RUN の `state.md` / `plan.md` |
 | loop-constraints / gate.yaml | ルートの同名ファイル → プロンプト挿入 |

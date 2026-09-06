@@ -28,6 +28,7 @@ L2（最小修正 + 別検証）や L3（無人）にする場合は `loop.yaml`
 3. **ガードレール挿入** — プロンプト先頭に denylist・Maker/Checker・制約（`loop-constraints.md`）
 4. **実行ログ** — 対象の `.loop-engineering/loop-run-log.md` に1行追記
 5. **Issue 完了ゲート** — `require_issue` 時は promise だけでは完了にしない
+6. **worktree ゲート** — Ralph 後に対象ツリーをスナップショット比較。L0/L1 のソース改変と denylist ヒットはホストが失敗にする（`--skip-worktree-gate` で回避可）
 
 ## Kill switch
 

@@ -3,7 +3,7 @@
 | 項目 | 値 |
 | --- | --- |
 | ステータス | `done`（ホスト強制。参考は cobusgreyling パターン） |
-| 関連実装 | `engine/lib/gate.sh`, `engine/run-loop.sh`, `gate.yaml`, `loop-constraints.md`, `loop-budget.md`, `LOOP.md` |
+| 関連実装 | `engine/lib/gate.sh`, `engine/lib/worktree_gate.py`, `engine/run-loop.sh`, `gate.yaml`, `loop-constraints.md`, `loop-budget.md`, `LOOP.md` |
 | 参考 | `vendor/cobusgreyling-loop-engineering/`（`docs/safety.md`, `docs/anti-patterns.md`, `docs/loop-design-checklist.md`） |
 
 ## 現状
@@ -18,6 +18,7 @@
 | ガードレール挿入 | レンダリング済み `prompt.md` 先頭に denylist・Maker/Checker・`loop-constraints.md` |
 | 実行ログ | `<target>/.loop-engineering/loop-run-log.md` に1行追記（dry-run 含む） |
 | Issue ゲート | 既存。promise だけでは完了にしない |
+| worktree ゲート | Ralph 後にスナップショット比較。L0/L1 ソース改変と denylist はホスト失敗（`engine/lib/worktree_gate.py`） |
 
 ## 自律度
 
@@ -53,6 +54,20 @@ dry-run でも `prompt.md` 先頭に Loop Guardrails があること。
 ### FR-SAFE-4 実行ログ
 
 対象ランタイムに append-only の markdown 表。失敗時も trap 経由の meta とは別に、起動できた RUN は1行残す。
+
+### FR-SAFE-5 worktree ゲート
+
+Ralph 実行の直前に対象ツリーの内容ハッシュを保存し、直後に比較する（`.loop-engineering/` / `.ralph/` / `node_modules/` / `.opencode/local/` / `.git/` は除外）。
+
+| 条件 | 結果 |
+| --- | --- |
+| denylist ヒット（全レベル） | 終了コード 1、`worktree-violations.txt` |
+| L0/L1 で除外以外のパスが変化 | 同上（`trigger: l1-source`） |
+| L2/L3 で変化ファイル数が `gate.yaml` の `maxFiles` 超 | 同上（`trigger: max-files`） |
+
+`--skip-worktree-gate` または `LOOP_SKIP_WORKTREE_GATE=1` でスキップ。dry-run では走らない（エージェント未実行）。
+
+参考の判定順は `vendor/cobusgreyling-loop-engineering/tools/loop-gate`（denylist → maxFiles）。auto-merge allowlist はホストがマージしないため未実装。
 
 ## 非目標
 

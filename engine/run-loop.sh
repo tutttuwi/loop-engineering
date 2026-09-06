@@ -63,6 +63,7 @@ Usage:
   --status                 対象プロジェクト上の Ralph 状態を表示する(--loop 不要)
   --extra "<args>"         ralph CLIにそのまま追加で渡す引数
   --allow-l3               autonomy_level=L3 の無人実行を許可(既定は拒否)
+  --skip-worktree-gate     L1ソース改変 / denylist のホスト検証をスキップする
   -h, --help               このヘルプを表示
 
 終了コード: 0=成功 / 1=ホスト側失敗 / その他=Ralph の終了コード
@@ -110,6 +111,7 @@ list_targets_only=0
 post_report=0
 post_report_always=0
 allow_l3=0
+skip_worktree_gate=0
 extra_args=""
 RUN_META_PATH=""
 RUN_META_STARTED_AT=""
@@ -173,6 +175,7 @@ while [[ $# -gt 0 ]]; do
     --status) status_only=1; shift ;;
     --extra) extra_args="$2"; shift 2 ;;
     --allow-l3) allow_l3=1; shift ;;
+    --skip-worktree-gate) skip_worktree_gate=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) log_error "不明な引数: $1"; usage; exit 1 ;;
   esac
@@ -430,12 +433,33 @@ if [[ -n "$extra_args" ]]; then
   ralph_cmd+=("${extra_arr[@]}")
 fi
 
+worktree_snap="${output_dir}/worktree-snapshot.tsv"
+_skip_wt="$skip_worktree_gate"
+_env_skip_wt="$(printf '%s' "${LOOP_SKIP_WORKTREE_GATE:-}" | tr '[:upper:]' '[:lower:]')"
+case "$_env_skip_wt" in
+  1|true|yes|on) _skip_wt=1 ;;
+esac
+if [[ "$_skip_wt" -eq 0 ]]; then
+  snapshot_target_worktree "$target_path" "$worktree_snap" || exit 1
+fi
+
 log_info "実行コマンド: ${ralph_cmd[*]} (cwd=${target_path})"
 ralph_rc=0
 (
   cd "$target_path"
   "${ralph_cmd[@]}"
 ) || ralph_rc=$?
+
+if [[ "$_skip_wt" -eq 0 ]]; then
+  if ! enforce_worktree_gate \
+    "$target_path" \
+    "$worktree_snap" \
+    "$autonomy_level" \
+    "${ROOT_DIR}/gate.yaml" \
+    "${output_dir}/worktree-violations.txt"; then
+    exit 1
+  fi
+fi
 
 # latest シンボリックリンク(成功時)
 loop_out_root="${runtime_root}/output/${loop_name}"

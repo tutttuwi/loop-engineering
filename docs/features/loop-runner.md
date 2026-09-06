@@ -25,6 +25,7 @@
 - `OUTPUT_DIR/run-meta.json`（loop / started_at / exit_code / resumed_from / autonomy_level 等）
 - 実行前に `validate_loop_dir`（必須キー・参照ファイル）
 - プロンプト先頭へ Loop Guardrails を挿入。対象の `.loop-engineering/loop-run-log.md` に追記
+- Ralph 後の worktree ゲート（L1 ソース改変 / denylist。`--skip-worktree-gate`）
 
 ### 完了判定
 
