@@ -27,6 +27,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=./lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck source=./lib/gate.sh
+source "$SCRIPT_DIR/lib/gate.sh"
 
 RALPH_ENTRY="${ROOT_DIR}/vendor/open-ralph-wiggum/ralph.ts"
 
@@ -60,6 +62,7 @@ Usage:
   --resume-from <RUN_ID>   指定 RUN_ID の進捗を引き継ぐ(--resume と排他)
   --status                 対象プロジェクト上の Ralph 状態を表示する(--loop 不要)
   --extra "<args>"         ralph CLIにそのまま追加で渡す引数
+  --allow-l3               autonomy_level=L3 の無人実行を許可(既定は拒否)
   -h, --help               このヘルプを表示
 
 終了コード: 0=成功 / 1=ホスト側失敗 / その他=Ralph の終了コード
@@ -106,6 +109,7 @@ status_only=0
 list_targets_only=0
 post_report=0
 post_report_always=0
+allow_l3=0
 extra_args=""
 RUN_META_PATH=""
 RUN_META_STARTED_AT=""
@@ -116,6 +120,16 @@ RUN_META_RESUMED_FROM=""
 
 _run_meta_finalize() {
   local ec="${1:-0}"
+  if [[ -n "${runtime_root:-}" && -n "${loop_name:-}" && -n "${run_id:-}" ]]; then
+    append_loop_run_log \
+      "${runtime_root}/loop-run-log.md" \
+      "$loop_name" \
+      "$run_id" \
+      "${RUN_META_AUTONOMY_LEVEL:-L1}" \
+      "${RUN_META_DRY_RUN:-false}" \
+      "$ec" \
+      "${RUN_META_RESUMED_FROM:-}" || true
+  fi
   if [[ -n "${RUN_META_PATH:-}" ]]; then
     write_run_meta_json "$RUN_META_PATH" "$ec" || true
   fi
@@ -158,6 +172,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --status) status_only=1; shift ;;
     --extra) extra_args="$2"; shift 2 ;;
+    --allow-l3) allow_l3=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) log_error "不明な引数: $1"; usage; exit 1 ;;
   esac
@@ -208,6 +223,12 @@ prompt_template="${loop_dir}/$(yaml_get "$loop_yaml" "prompt_file" "prompt.md")"
 resolved="$(resolve_target_path "$target_config" "$target_override" "$target_registry_name")"
 target_path="${resolved%%$'\t'*}"
 target_yaml="${resolved#*$'\t'}"
+
+require_loop_not_paused "$ROOT_DIR" "$target_path" || exit 1
+autonomy_level="$(normalize_autonomy_level "$(yaml_get "$loop_yaml" "autonomy_level" "L1")")" || exit 1
+assert_autonomy_allowed "$autonomy_level" "$allow_l3" || exit 1
+RUN_META_AUTONOMY_LEVEL="$autonomy_level"
+export LOOP_AUTONOMY_LEVEL="$autonomy_level"
 
 # --- 各種パラメータ解決 ----------------------------------------------------
 target_name="$(yaml_get "$target_yaml" "target_name" "$(basename "$target_path")")"
@@ -343,9 +364,13 @@ EOF
 fi
 
 export RESUME_FROM_RUN_ID="${resume_src_id:-}"
+export LOOP_AUTONOMY_LEVEL="$autonomy_level"
 
 rendered_prompt="${output_dir}/prompt.md"
 "${SCRIPT_DIR}/lib/render-prompt.sh" "$prompt_template" > "$rendered_prompt"
+
+guardrails="$(build_loop_guardrails "$autonomy_level" "${ROOT_DIR}/loop-constraints.md" "${ROOT_DIR}/gate.yaml")"
+prepend_block_to_file "$rendered_prompt" "$guardrails" || exit 1
 
 if [[ -n "$resume_src_id" ]]; then
   copied_csv=""
@@ -361,6 +386,7 @@ if [[ -n "$resume_src_id" ]]; then
 fi
 
 log_info "ループ            : ${loop_name}"
+log_info "自律度            : ${autonomy_level}"
 log_info "対象プロジェクト  : ${target_path} (${target_name})"
 log_info "Issue投稿先種別   : ${repo_provider}"
 log_info "Issue投稿モード   : ${issue_post_mode}$([[ -n "$issue_target" ]] && echo " (target=${issue_target})" || true)"

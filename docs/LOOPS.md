@@ -129,9 +129,11 @@ cp -R loops/_template loops/my-new-loop
 
 ### 各ファイルの役割
 
+同梱ループの既定自律度は **L1（レポート専用）** です。対象アプリのソースは変更しません。運用の正は [LOOP.md](../LOOP.md)、安全装置は [features/loop-safety.md](./features/loop-safety.md)。
+
 | ファイル | 役割 |
 | --- | --- |
-| `loop.yaml` | 名前・イテレーション・完了promise・`seed_files`・ECC取り込み一覧 |
+| `loop.yaml` | 名前・イテレーション・完了promise・`autonomy_level`・`seed_files`・ECC取り込み一覧 |
 | `prompt.md` | 毎イテレーション同じプロンプト（`{{VAR}}` 展開あり） |
 | `report-template.md` | スライド構成の指針 |
 | `README.md` | 人間向けの使い方 |

@@ -13,6 +13,7 @@
 3. 完了時に `<promise>{{COMPLETION_PROMISE}}</promise>` を出力するよう指示すること
 4. Issue 投稿手順は `{{ISSUE_POST_INSTRUCTIONS}}` に従うこと
 5. 新規ループは `_template` / `new-loop.sh` で追加できること
+6. 既定 `autonomy_level` は `L1`（対象ソースを変更しない。 [loop-safety.md](./loop-safety.md)）
 
 ## ループ別契約
 

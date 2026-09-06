@@ -39,3 +39,6 @@ output/**
 # Misc
 *.log
 *.tmp
+
+# Loop kill switch (local; see LOOP.md)
+.loop-pause

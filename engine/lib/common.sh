@@ -228,6 +228,19 @@ validate_loop_dir() {
         ;;
     esac
   fi
+
+  # autonomy_level がある場合は L0–L3（省略時は run-loop が L1）
+  val="$(yaml_get "$loop_yaml" "autonomy_level" "")"
+  if [[ -n "$val" ]]; then
+    val="$(printf '%s' "$val" | tr '[:lower:]' '[:upper:]')"
+    case "$val" in
+      L0|L1|L2|L3) ;;
+      *)
+        log_error "autonomy_level は L0|L1|L2|L3 です: ${val}"
+        return 1
+        ;;
+    esac
+  fi
   return 0
 }
 
@@ -235,7 +248,7 @@ validate_loop_dir() {
 # 使い方: write_run_meta_json <path> <exit_code>  ※他フィールドは環境変数/引数から
 # 必須環境: LOOP_NAME, TARGET_PATH, RUN_ID, OUTPUT_DIR
 # 任意: RUN_META_STARTED_AT, RUN_META_DRY_RUN, RUN_META_REQUIRE_ISSUE,
-#       RUN_META_ISSUE_FALLBACK, RUN_META_RESUMED_FROM
+#       RUN_META_ISSUE_FALLBACK, RUN_META_RESUMED_FROM, RUN_META_AUTONOMY_LEVEL
 write_run_meta_json() {
   local path="$1"
   local exit_code="${2:-}"
@@ -257,9 +270,10 @@ write_run_meta_json() {
     "${RUN_META_REQUIRE_ISSUE:-}" \
     "${RUN_META_ISSUE_FALLBACK:-}" \
     "${OUTPUT_DIR:-}" \
-    "${RUN_META_RESUMED_FROM:-}" <<'PY'
+    "${RUN_META_RESUMED_FROM:-}" \
+    "${RUN_META_AUTONOMY_LEVEL:-}" <<'PY'
 import json, sys
-path, loop, target, run_id, started, finished, exit_code, dry_run, require_issue, issue_fallback, output_dir, resumed_from = sys.argv[1:13]
+path, loop, target, run_id, started, finished, exit_code, dry_run, require_issue, issue_fallback, output_dir, resumed_from, autonomy = sys.argv[1:14]
 meta = {
     "loop": loop,
     "target_path": target,
@@ -273,6 +287,8 @@ meta = {
 }
 if resumed_from:
     meta["resumed_from"] = resumed_from
+if autonomy:
+    meta["autonomy_level"] = autonomy
 if exit_code != "":
     try:
         meta["exit_code"] = int(exit_code)

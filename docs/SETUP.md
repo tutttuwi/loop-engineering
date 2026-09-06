@@ -67,7 +67,8 @@ cd /path/to/loop-engineering
 
 `install.sh` が内部で行うこと:
 
-1. `vendor/open-ralph-wiggum` と `vendor/ecc` の submodule 初期化
+1. `vendor/open-ralph-wiggum` と `vendor/ecc` の submodule 初期化（実行に必須）
+   あわせて `vendor/cobusgreyling-loop-engineering`（パターン参考。未初期化でもループは回せる）
 2. opencode CLI の有無確認
 3. `project-config/target.yaml` 未作成時の案内
 4. `./setup/doctor.sh` による環境診断

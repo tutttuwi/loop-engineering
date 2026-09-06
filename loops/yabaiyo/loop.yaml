@@ -5,6 +5,7 @@ agent: opencode
 max_iterations: 25
 min_iterations: 3
 completion_promise: YABAIYO_COMPLETE
+autonomy_level: L1
 
 # ホスト側 Issue 完了ゲート (run-loop.sh)
 require_issue: true

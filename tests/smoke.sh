@@ -9,6 +9,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=../engine/lib/common.sh
 source "${ROOT_DIR}/engine/lib/common.sh"
+# shellcheck source=../engine/lib/gate.sh
+source "${ROOT_DIR}/engine/lib/gate.sh"
 
 pass=0
 fail=0
@@ -1633,6 +1635,109 @@ if grep -q '\.loop-engineering が git に追跡されています' "${TMP_ROOT}
 else
   log_error "doctor tracked-.loop-engineering check failed"
   sed -n '1,80p' "${TMP_ROOT}/doc-track.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+# --- loop safety: kill switch / autonomy / guardrails / run log ------------
+echo ""
+echo "--- loop safety (gate.sh) ---------------------------------------------"
+assert_eq "normalize default L1" "$(normalize_autonomy_level "")" "L1"
+assert_eq "normalize l2" "$(normalize_autonomy_level "l2")" "L2"
+assert_fail "normalize rejects L9" normalize_autonomy_level "L9"
+assert_ok "L1 always allowed" assert_autonomy_allowed L1 0
+assert_fail "L3 denied without flag" assert_autonomy_allowed L3 0
+assert_ok "L3 allowed with flag" assert_autonomy_allowed L3 1
+_saved_pause="${LOOP_PAUSE_ALL-__unset__}"
+export LOOP_PAUSE_ALL=1
+assert_ok "LOOP_PAUSE_ALL pauses" is_loop_paused "$ROOT_DIR" "$target_dir"
+assert_fail "require_loop_not_paused fails when paused" require_loop_not_paused "$ROOT_DIR" "$target_dir"
+unset LOOP_PAUSE_ALL || true
+assert_fail "not paused by default" is_loop_paused "$ROOT_DIR" "$target_dir"
+pause_file="${TMP_ROOT}/pause-root/.loop-pause"
+mkdir -p "$(dirname "$pause_file")"
+: >"$pause_file"
+assert_ok "root .loop-pause pauses" is_loop_paused "$(dirname "$pause_file")" "$target_dir"
+target_pause="${target_dir}/.loop-engineering/.loop-pause"
+: >"$target_pause"
+assert_ok "target .loop-pause pauses" is_loop_paused "$ROOT_DIR" "$target_dir"
+rm -f "$target_pause"
+if [[ "$_saved_pause" == "__unset__" ]]; then
+  unset LOOP_PAUSE_ALL || true
+else
+  export LOOP_PAUSE_ALL="$_saved_pause"
+fi
+
+set +e
+LOOP_PAUSE_ALL=1 "${ROOT_DIR}/engine/run-loop.sh" \
+  --loop monkey-test \
+  --target-config "$target_yaml" \
+  --dry-run \
+  >"${TMP_ROOT}/pause-run.out" 2>"${TMP_ROOT}/pause-run.err"
+pause_run_rc=$?
+set -e
+if [[ "$pause_run_rc" -ne 0 ]] && grep -q '一時停止' "${TMP_ROOT}/pause-run.err"; then
+  log_ok "run-loop dry-run honors LOOP_PAUSE_ALL"
+  pass=$((pass + 1))
+else
+  log_error "run-loop kill switch not enforced (rc=${pause_run_rc})"
+  sed -n '1,40p' "${TMP_ROOT}/pause-run.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+l3_dir="${TMP_ROOT}/l3-loop"
+mkdir -p "$l3_dir"
+cp "${ROOT_DIR}/loops/_template/prompt.md" "${l3_dir}/prompt.md"
+cp "${ROOT_DIR}/loops/_template/report-template.md" "${l3_dir}/report-template.md"
+cat >"${l3_dir}/loop.yaml" <<'EOF'
+name: l3-smoke
+description: l3 smoke
+agent: opencode
+max_iterations: 2
+min_iterations: 1
+completion_promise: L3_SMOKE_COMPLETE
+autonomy_level: L3
+require_issue: false
+prompt_file: prompt.md
+report_template: report-template.md
+EOF
+assert_ok "validate L3 loop.yaml" validate_loop_dir "$l3_dir"
+bad_auto="${TMP_ROOT}/bad-auto"
+mkdir -p "$bad_auto"
+cp "${l3_dir}/prompt.md" "${bad_auto}/prompt.md"
+cp "${l3_dir}/report-template.md" "${bad_auto}/report-template.md"
+sed 's/autonomy_level: L3/autonomy_level: L9/' "${l3_dir}/loop.yaml" >"${bad_auto}/loop.yaml"
+# name key still l3-smoke; validation only checks enum
+assert_fail "validate rejects autonomy_level L9" validate_loop_dir "$bad_auto"
+
+# bundled dry-run prompt contains host guardrails + run-meta autonomy + run log
+mt_prompt="$(find "${target_dir}/.loop-engineering/output/monkey-test" -name prompt.md 2>/dev/null | head -n1)"
+if [[ -n "$mt_prompt" ]] \
+  && grep -q 'Loop Guardrails' "$mt_prompt" \
+  && grep -q 'レポート専用' "$mt_prompt" \
+  && grep -q 'Maker/Checker' "$mt_prompt"; then
+  log_ok "dry-run prompt prepends L1 Loop Guardrails"
+  pass=$((pass + 1))
+else
+  log_error "dry-run prompt missing Loop Guardrails"
+  [[ -n "$mt_prompt" ]] && sed -n '1,40p' "$mt_prompt" >&2 || true
+  fail=$((fail + 1))
+fi
+
+if [[ -n "$meta_run" ]] && grep -q '"autonomy_level": "L1"' "$meta_run"; then
+  log_ok "run-meta.json records autonomy_level L1"
+  pass=$((pass + 1))
+else
+  log_error "run-meta.json missing autonomy_level"
+  [[ -n "$meta_run" ]] && sed -n '1,40p' "$meta_run" >&2 || true
+  fail=$((fail + 1))
+fi
+
+if [[ -f "${target_dir}/.loop-engineering/loop-run-log.md" ]] \
+  && grep -q 'monkey-test' "${target_dir}/.loop-engineering/loop-run-log.md"; then
+  log_ok "dry-run appends target loop-run-log.md"
+  pass=$((pass + 1))
+else
+  log_error "loop-run-log.md missing after dry-run"
   fail=$((fail + 1))
 fi
 

@@ -51,7 +51,7 @@
 
 | ディレクトリ | 責務 | 変更頻度 |
 | --- | --- | --- |
-| `vendor/` | upstream（Ralph / ECC） | submodule update 時のみ |
+| `vendor/` | upstream（Ralph / ECC / cobusgreyling パターン参考） | submodule update 時のみ |
 | `engine/` | 実行・レポート・動画の共通枠 | 基盤改善時 |
 | `engine/opencode/` | **未使用の参考テンプレ**（実生成は `setup/lib/build_target_opencode_config.py`） | 参照のみ |
 | `loops/` | ループアイデア（引数で切替） | アイデア追加時 |
@@ -123,4 +123,4 @@ TTS 切替: `LOOP_TTS_ENGINE=say|voicevox|openai|none`
 
 - `loop.yaml` / `target.yaml` は **フラットな key: value のみ**（bash3.2 でも動く簡易パーサ）
 - リストはカンマ区切り1行（`ecc_agents: a,b,c`）
-- `vendor/` は直接編集しない（カスタムは `project-config/` へ）
+- `vendor/` は直接編集しない（カスタムは `project-config/` へ）。パターン参考は `vendor/cobusgreyling-loop-engineering/`

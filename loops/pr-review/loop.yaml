@@ -5,6 +5,7 @@ agent: opencode
 max_iterations: 8
 min_iterations: 1
 completion_promise: PR_REVIEW_COMPLETE
+autonomy_level: L1
 
 require_issue: true
 seed_files: review-notes.md

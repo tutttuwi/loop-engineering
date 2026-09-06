@@ -4,3 +4,6 @@
 [submodule "vendor/ecc"]
 	path = vendor/ecc
 	url = https://github.com/affaan-m/ECC.git
+[submodule "vendor/cobusgreyling-loop-engineering"]
+	path = vendor/cobusgreyling-loop-engineering
+	url = https://github.com/cobusgreyling/loop-engineering.git
