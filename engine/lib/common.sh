@@ -241,6 +241,13 @@ validate_loop_dir() {
         ;;
     esac
   fi
+
+  # max_runs_per_day がある場合は 0 以上の整数（0=無制限。省略時は run-loop が 2）
+  val="$(yaml_get "$loop_yaml" "max_runs_per_day" "")"
+  if [[ -n "$val" && ! "$val" =~ ^[0-9]+$ ]]; then
+    log_error "max_runs_per_day は 0 以上の整数です: ${val}"
+    return 1
+  fi
   return 0
 }
 

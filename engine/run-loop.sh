@@ -64,6 +64,7 @@ Usage:
   --extra "<args>"         ralph CLIにそのまま追加で渡す引数
   --allow-l3               autonomy_level=L3 の無人実行を許可(既定は拒否)
   --skip-worktree-gate     L1ソース改変 / denylist のホスト検証をスキップする
+  --skip-budget-gate       日次 max_runs_per_day のホスト検証をスキップする
   -h, --help               このヘルプを表示
 
 終了コード: 0=成功 / 1=ホスト側失敗 / その他=Ralph の終了コード
@@ -112,6 +113,7 @@ post_report=0
 post_report_always=0
 allow_l3=0
 skip_worktree_gate=0
+skip_budget_gate=0
 extra_args=""
 RUN_META_PATH=""
 RUN_META_STARTED_AT=""
@@ -122,7 +124,8 @@ RUN_META_RESUMED_FROM=""
 
 _run_meta_finalize() {
   local ec="${1:-0}"
-  if [[ -n "${runtime_root:-}" && -n "${loop_name:-}" && -n "${run_id:-}" ]]; then
+  # RUN_META_PATH がある = OUTPUT_DIR を切った実行。日次予算拒否など起動前失敗は記録しない。
+  if [[ -n "${RUN_META_PATH:-}" && -n "${runtime_root:-}" && -n "${loop_name:-}" && -n "${run_id:-}" ]]; then
     append_loop_run_log \
       "${runtime_root}/loop-run-log.md" \
       "$loop_name" \
@@ -176,6 +179,7 @@ while [[ $# -gt 0 ]]; do
     --extra) extra_args="$2"; shift 2 ;;
     --allow-l3) allow_l3=1; shift ;;
     --skip-worktree-gate) skip_worktree_gate=1; shift ;;
+    --skip-budget-gate) skip_budget_gate=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) log_error "不明な引数: $1"; usage; exit 1 ;;
   esac
@@ -250,6 +254,7 @@ completion_promise="$(yaml_get "$loop_yaml" "completion_promise" "COMPLETE")"
 agent="$(yaml_get "$loop_yaml" "agent" "opencode")"
 require_issue="$(yaml_get "$loop_yaml" "require_issue" "true")"
 seed_files_csv="$(yaml_get "$loop_yaml" "seed_files" "")"
+max_runs_per_day="$(yaml_get "$loop_yaml" "max_runs_per_day" "2")"
 
 run_id="$(timestamp)"
 
@@ -264,6 +269,15 @@ stage_engine_lib_into_target "$target_path"
 runtime_root="${target_path}/.loop-engineering"
 loop_out_root="${runtime_root}/output/${loop_name}"
 output_dir="${loop_out_root}/${run_id}"
+
+_skip_budget="$skip_budget_gate"
+_env_skip_budget="$(printf '%s' "${LOOP_SKIP_BUDGET_GATE:-}" | tr '[:upper:]' '[:lower:]')"
+case "$_env_skip_budget" in
+  1|true|yes|on) _skip_budget=1 ;;
+esac
+if [[ "$dry_run" -eq 0 && "$_skip_budget" -eq 0 ]]; then
+  assert_daily_run_budget "${runtime_root}/loop-run-log.md" "$loop_name" "$max_runs_per_day" || exit 1
+fi
 
 resume_src=""
 resume_src_id=""
@@ -390,6 +404,7 @@ fi
 
 log_info "ループ            : ${loop_name}"
 log_info "自律度            : ${autonomy_level}"
+log_info "日次実行上限      : ${max_runs_per_day} (0=無制限)"
 log_info "対象プロジェクト  : ${target_path} (${target_name})"
 log_info "Issue投稿先種別   : ${repo_provider}"
 log_info "Issue投稿モード   : ${issue_post_mode}$([[ -n "$issue_target" ]] && echo " (target=${issue_target})" || true)"

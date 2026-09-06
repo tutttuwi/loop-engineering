@@ -29,6 +29,7 @@ L2（最小修正 + 別検証）や L3（無人）にする場合は `loop.yaml`
 4. **実行ログ** — 対象の `.loop-engineering/loop-run-log.md` に1行追記
 5. **Issue 完了ゲート** — `require_issue` 時は promise だけでは完了にしない
 6. **worktree ゲート** — Ralph 後に対象ツリーをスナップショット比較。L0/L1 のソース改変と denylist ヒットはホストが失敗にする（`--skip-worktree-gate` で回避可）
+7. **日次予算** — 対象の `loop-run-log.md` から本日(UTC)の本番実行を数え、`max_runs_per_day`（既定 2、0 は無制限）を超えたら起動しない（`--skip-budget-gate` で回避可）
 
 ## Kill switch
 

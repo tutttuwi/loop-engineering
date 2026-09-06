@@ -32,6 +32,7 @@ cobusgreyling 側はパターンライブラリ（スケジュール、STATE、L
 | STATE.md | リポジトリルート（基盤自身）と各 RUN の `state.md` / `plan.md` |
 | loop-constraints / gate.yaml | ルートの同名ファイル → プロンプト挿入 |
 | loop-run-log | `<target>/.loop-engineering/loop-run-log.md` |
+| 日次予算 | `loop.yaml` の `max_runs_per_day` を `loop-run-log.md` からホスト強制 |
 | 新しい仕事のパターン | `loops/_template` から同梱ループ化（需要ベース） |
 
 更新:

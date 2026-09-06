@@ -155,6 +155,7 @@ build_loop_guardrails() {
 - 自律度: **${level}** — ${level_help}
 - Maker/Checker: 実装(調査)した同一ターンで完了 promise を自己承認しない。成果物が揃っていることをファイルで確認してから \`<promise>\` を出す。
 - Kill switch: \`LOOP_PAUSE_ALL=1\` または \`.loop-pause\` があればホストが起動を拒否する。
+- 日次予算: 同一ループの本番実行は \`loop.yaml\` の \`max_runs_per_day\`（既定 2、0=無制限）まで。dry-run は除外。\`loop-budget.md\` の上限をエージェントが上げてはならない。
 - 秘密情報を STATE / findings / Issue / ログに書かない。
 - テストを消して緑にしない。フレークをコード変更だけで「直した」ことにしない。
 
@@ -268,4 +269,69 @@ path_matches_glob() {
   local got
   got="$(python3 "$_WORKTREE_GATE_PY" match-glob --path "$path" --pattern "$pattern")"
   [[ "$got" == "yes" ]]
+}
+
+# 対象の loop-run-log.md から、本日(UTC)の本番実行回数を数える(dry-run 除外)。
+# 使い方: count_loop_runs_today <log_path> <loop_name>
+count_loop_runs_today() {
+  local log_path="$1"
+  local loop_name="$2"
+  python3 - "$log_path" "$loop_name" <<'PY'
+import datetime as dt
+import sys
+
+path, loop = sys.argv[1], sys.argv[2]
+today = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
+if not path:
+    print(0)
+    raise SystemExit(0)
+try:
+    text = open(path, encoding="utf-8").read()
+except OSError:
+    print(0)
+    raise SystemExit(0)
+
+count = 0
+for line in text.splitlines():
+    if not line.startswith("|"):
+        continue
+    cells = [c.strip() for c in line.strip().strip("|").split("|")]
+    if len(cells) < 5:
+        continue
+    ts, name, _run_id, _auto, dry = cells[0], cells[1], cells[2], cells[3], cells[4]
+    if not ts.startswith(today + "T"):
+        continue
+    if name != loop:
+        continue
+    if dry.lower() in ("true", "1", "yes", "on"):
+        continue
+    count += 1
+print(count)
+PY
+}
+
+# 日次本番実行の上限。max=0 は無制限。
+# 使い方: assert_daily_run_budget <log_path> <loop_name> <max_runs_per_day>
+assert_daily_run_budget() {
+  local log_path="$1"
+  local loop_name="$2"
+  local max_runs="${3:-2}"
+  local used
+  if [[ ! "$max_runs" =~ ^[0-9]+$ ]]; then
+    log_error "max_runs_per_day は 0 以上の整数です: ${max_runs}"
+    return 1
+  fi
+  if [[ "$max_runs" -eq 0 ]]; then
+    return 0
+  fi
+  used="$(count_loop_runs_today "$log_path" "$loop_name")"
+  if [[ "$used" -ge "$max_runs" ]]; then
+    log_error "日次実行予算を超過しました: loop=${loop_name} 本日 ${used} 回 / 上限 ${max_runs}"
+    log_error "  dry-run は除外。上限は loop.yaml の max_runs_per_day（0 で無制限）"
+    log_error "  スキップ: --skip-budget-gate または LOOP_SKIP_BUDGET_GATE=1"
+    log_error "  参考: loop-budget.md / vendor/cobusgreyling-loop-engineering/docs/operating-loops.md"
+    return 1
+  fi
+  log_ok "日次実行予算: ${loop_name} ${used}/${max_runs}（本番・UTC日）"
+  return 0
 }

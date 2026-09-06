@@ -19,6 +19,7 @@
 | 実行ログ | `<target>/.loop-engineering/loop-run-log.md` に1行追記（dry-run 含む） |
 | Issue ゲート | 既存。promise だけでは完了にしない |
 | worktree ゲート | Ralph 後にスナップショット比較。L0/L1 ソース改変と denylist はホスト失敗（`engine/lib/worktree_gate.py`） |
+| 日次予算 | `loop-run-log.md` の本日本番回数 vs `max_runs_per_day`（既定 2） |
 
 ## 自律度
 
@@ -49,7 +50,7 @@
 
 ### FR-SAFE-3 ガードレール
 
-dry-run でも `prompt.md` 先頭に Loop Guardrails があること。
+dry-run でも `prompt.md` 先頭に Loop Guardrails があること（denylist・Maker/Checker・日次予算・`loop-constraints.md`）。
 
 ### FR-SAFE-4 実行ログ
 
@@ -68,6 +69,18 @@ Ralph 実行の直前に対象ツリーの内容ハッシュを保存し、直�
 `--skip-worktree-gate` または `LOOP_SKIP_WORKTREE_GATE=1` でスキップ。dry-run では走らない（エージェント未実行）。
 
 参考の判定順は `vendor/cobusgreyling-loop-engineering/tools/loop-gate`（denylist → maxFiles）。auto-merge allowlist はホストがマージしないため未実装。
+
+### FR-SAFE-6 日次実行予算
+
+本番実行（dry-run 以外）の直前に、対象 `<target>/.loop-engineering/loop-run-log.md` から **本日 UTC・同一ループ名・dry_run=false** の行数を数える。
+
+| `max_runs_per_day` | 動き |
+| --- | --- |
+| 省略 | 2（`loop-budget.md` と同じ） |
+| `0` | 無制限 |
+| `N>=1` | 既存回数が N 以上なら終了コード 1（次の実行を拒否） |
+
+`--skip-budget-gate` / `LOOP_SKIP_BUDGET_GATE=1` でスキップ。Ralph を起動した失敗（トークン消費済み）は回数に含める。日次予算・kill switch など起動前の拒否は `loop-run-log.md` に書かない。
 
 ## 非目標
 

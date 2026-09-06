@@ -26,6 +26,7 @@
 - 実行前に `validate_loop_dir`（必須キー・参照ファイル）
 - プロンプト先頭へ Loop Guardrails を挿入。対象の `.loop-engineering/loop-run-log.md` に追記
 - Ralph 後の worktree ゲート（L1 ソース改変 / denylist。`--skip-worktree-gate`）
+- 日次 `max_runs_per_day` 予算（`--skip-budget-gate`）
 
 ### 完了判定
 

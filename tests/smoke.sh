@@ -1714,7 +1714,8 @@ mt_prompt="$(find "${target_dir}/.loop-engineering/output/monkey-test" -name pro
 if [[ -n "$mt_prompt" ]] \
   && grep -q 'Loop Guardrails' "$mt_prompt" \
   && grep -q 'レポート専用' "$mt_prompt" \
-  && grep -q 'Maker/Checker' "$mt_prompt"; then
+  && grep -q 'Maker/Checker' "$mt_prompt" \
+  && grep -q 'max_runs_per_day' "$mt_prompt"; then
   log_ok "dry-run prompt prepends L1 Loop Guardrails"
   pass=$((pass + 1))
 else
@@ -1840,6 +1841,130 @@ if [[ "$wt_skip_rc" -eq 0 ]]; then
 else
   log_error "--skip-worktree-gate still failed (rc=${wt_skip_rc})"
   sed -n '1,40p' "${TMP_ROOT}/wt-skip.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+echo ""
+echo "--- daily run budget (max_runs_per_day) ------------------------------"
+budget_today="$(python3 -c 'import datetime as d; print(d.datetime.now(d.timezone.utc).strftime("%Y-%m-%d"))')"
+budget_yday="$(python3 -c 'import datetime as d; print((d.datetime.now(d.timezone.utc)-d.timedelta(days=1)).strftime("%Y-%m-%d"))')"
+budget_log="${TMP_ROOT}/budget-log.md"
+cat >"$budget_log" <<EOF
+# Loop Run Log
+
+| timestamp (UTC) | loop | run_id | autonomy | dry_run | exit_code | resumed_from |
+| --- | --- | --- | --- | --- | --- | --- |
+| ${budget_today}T00:00:01Z | monkey-test | r1 | L1 | false | 0 | |
+| ${budget_today}T01:00:00Z | monkey-test | r2 | L1 | false | 1 | |
+| ${budget_today}T02:00:00Z | monkey-test | r-dry | L1 | true | 0 | |
+| ${budget_today}T03:00:00Z | yabaiyo | r-other | L1 | false | 0 | |
+| ${budget_yday}T23:00:00Z | monkey-test | r-old | L1 | false | 0 | |
+EOF
+assert_eq "count today production (exclude dry/other/yesterday)" \
+  "$(count_loop_runs_today "$budget_log" "monkey-test")" "2"
+assert_eq "count missing log is 0" \
+  "$(count_loop_runs_today "${TMP_ROOT}/no-such-run-log.md" "monkey-test")" "0"
+assert_fail "assert budget 2/2 rejects" assert_daily_run_budget "$budget_log" "monkey-test" "2"
+assert_ok "assert budget max=0 unlimited" assert_daily_run_budget "$budget_log" "monkey-test" "0"
+assert_ok "assert budget yabaiyo still under cap" assert_daily_run_budget "$budget_log" "yabaiyo" "2"
+
+bad_budget="${TMP_ROOT}/bad-budget-loop"
+mkdir -p "$bad_budget"
+cp "${ROOT_DIR}/loops/_template/prompt.md" "${bad_budget}/prompt.md"
+cp "${ROOT_DIR}/loops/_template/report-template.md" "${bad_budget}/report-template.md"
+cat >"${bad_budget}/loop.yaml" <<'EOF'
+name: bad-budget
+description: invalid max_runs_per_day
+agent: opencode
+max_iterations: 1
+min_iterations: 1
+completion_promise: X
+require_issue: false
+prompt_file: prompt.md
+report_template: report-template.md
+max_runs_per_day: two
+EOF
+assert_fail "validate rejects non-integer max_runs_per_day" validate_loop_dir "$bad_budget"
+
+budget_target="${TMP_ROOT}/budget-run-target"
+mkdir -p "${budget_target}/.opencode" "${budget_target}/.loop-engineering"
+printf '{}\n' >"${budget_target}/.opencode/opencode.json"
+cp "$budget_log" "${budget_target}/.loop-engineering/loop-run-log.md"
+budget_yaml="${TMP_ROOT}/budget-run.yaml"
+cat >"$budget_yaml" <<EOF
+target_path: ${budget_target}
+target_name: budget-run
+repo_provider: github
+repo_url: https://github.com/example/budget-run
+default_branch: main
+issue_post_mode: create
+mcp_permission: ask
+EOF
+budget_bin="${TMP_ROOT}/budget-bin"
+mkdir -p "$budget_bin"
+cat >"${budget_bin}/bun" <<'EOF'
+#!/usr/bin/env bash
+echo "ralph budget-stub"
+exit 0
+EOF
+chmod +x "${budget_bin}/bun"
+
+set +e
+PATH="${budget_bin}:${PATH}" \
+  "${ROOT_DIR}/engine/run-loop.sh" \
+    --loop monkey-test \
+    --target-config "$budget_yaml" \
+    --skip-issue-gate \
+    --skip-worktree-gate \
+  >"${TMP_ROOT}/budget-block.out" 2>"${TMP_ROOT}/budget-block.err"
+budget_block_rc=$?
+set -e
+if [[ "$budget_block_rc" -ne 0 ]] \
+  && grep -q '日次実行予算' "${TMP_ROOT}/budget-block.err"; then
+  log_ok "run-loop rejects 3rd production run same UTC day"
+  pass=$((pass + 1))
+else
+  log_error "run-loop daily budget not enforced (rc=${budget_block_rc})"
+  sed -n '1,60p' "${TMP_ROOT}/budget-block.err" >&2 || true
+  fail=$((fail + 1))
+fi
+after_block="$(count_loop_runs_today "${budget_target}/.loop-engineering/loop-run-log.md" "monkey-test")"
+assert_eq "budget reject does not append run-log" "$after_block" "2"
+
+set +e
+"${ROOT_DIR}/engine/run-loop.sh" \
+  --loop monkey-test \
+  --target-config "$budget_yaml" \
+  --dry-run \
+  >"${TMP_ROOT}/budget-dry.out" 2>"${TMP_ROOT}/budget-dry.err"
+budget_dry_rc=$?
+set -e
+if [[ "$budget_dry_rc" -eq 0 ]]; then
+  log_ok "dry-run is not blocked by daily budget"
+  pass=$((pass + 1))
+else
+  log_error "dry-run hit daily budget (rc=${budget_dry_rc})"
+  sed -n '1,40p' "${TMP_ROOT}/budget-dry.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+set +e
+PATH="${budget_bin}:${PATH}" \
+  "${ROOT_DIR}/engine/run-loop.sh" \
+    --loop monkey-test \
+    --target-config "$budget_yaml" \
+    --skip-issue-gate \
+    --skip-worktree-gate \
+    --skip-budget-gate \
+  >"${TMP_ROOT}/budget-skip.out" 2>"${TMP_ROOT}/budget-skip.err"
+budget_skip_rc=$?
+set -e
+if [[ "$budget_skip_rc" -eq 0 ]]; then
+  log_ok "--skip-budget-gate bypasses daily cap"
+  pass=$((pass + 1))
+else
+  log_error "--skip-budget-gate still failed (rc=${budget_skip_rc})"
+  sed -n '1,40p' "${TMP_ROOT}/budget-skip.err" >&2 || true
   fail=$((fail + 1))
 fi
 

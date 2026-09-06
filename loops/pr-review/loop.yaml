@@ -6,6 +6,7 @@ max_iterations: 8
 min_iterations: 1
 completion_promise: PR_REVIEW_COMPLETE
 autonomy_level: L1
+max_runs_per_day: 2
 
 require_issue: true
 seed_files: review-notes.md
