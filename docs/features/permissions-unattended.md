@@ -8,6 +8,8 @@
 
 ## 背景
 
+無人実行: OpenCode は `--mcp-permission allow`。Claude Code は同指定時に `.claude/settings.json` の `permissions.defaultMode=bypassPermissions`。Cursor / Claude 本体は Ralph の `--allow-all`（既定オン）にも依存。ヘッドレス Cursor は `CURSOR_API_KEY`。詳細は [multi-agent.md](./multi-agent.md)。
+
 ループは長時間・非対話で回す前提だが、MCP permission の既定は `ask`。  
 Issue 作成や PR コメントが確認待ちになり、ヘッドレス実行と相性が悪い。
 

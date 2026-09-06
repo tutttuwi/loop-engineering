@@ -10,11 +10,11 @@
 
 doctor が見るもの（概略）:
 
-- bun / opencode / node / ffmpeg / python3 / git 等のコマンド
+- bun / 実行エージェント CLI / node / ffmpeg / python3 / git 等のコマンド
 - submodule（ralph / ecc）の存在
 - 同梱ループ一覧（`loops/*/loop.yaml`、`_template` 除外 — sync `--all-loops` と同契約）
-- LM Studio 疎通（任意・WARN）
-- Target readiness（`target.yaml` / init / mcp permission / lmstudio provider）
+- 実行エージェントに応じた準備（OpenCode なら LM Studio 疎通、Claude/Cursor なら各 CLI / API キー）
+- Target readiness（`target.yaml` / エージェント別 init / mcp permission / lmstudio provider）
 - Auth / Issue readiness（token / gh / glab）
 - TTS / Marp（`say` 有無と既定エンジン、`LOOP_MARP_VERSION` ピン推奨）
 - PORTING 整合（`.gitignore` の `.loop-engineering/`、sync/init 痕跡）
@@ -37,7 +37,8 @@ doctor が見るもの（概略）:
 | --- | --- |
 | `target.yaml` 不在 | ERROR（または WARN + 手順） |
 | `target_path` がディレクトリでない | ERROR |
-| `<target>/.opencode/opencode.json` 不在 | ERROR（ループ実行不可） |
+| `<target>/.opencode/opencode.json` 不在 | ERROR（**agent=opencode** のときループ実行不可） |
+| Claude/Cursor 向けレイアウト不在 | ERROR（それぞれの agent のとき） |
 | `GITHUB_TOKEN` 不在かつ github MCP 想定 | WARN |
 | `gh` 不在 | WARN（CLI 代替不可の旨） |
 | LM Studio `/models` 失敗 | WARN |
@@ -96,7 +97,7 @@ target 解決は `resolve_target_config` + `yaml_get` を再利用（`common.sh`
 
 | 規則 | 内容 |
 | --- | --- |
-| 判定 | `target_path` ディレクトリあり ∧ `.opencode/opencode.json` 不在 |
+| 判定 | `target_path` ディレクトリあり ∧ 実行エージェント向け init 成果物が不在 |
 | 出力 | `[ERROR] 未 init: <path> がありません。./setup/init-target-project.sh を実行してください` |
 | exit | ERROR≥1 なら非ゼロ（FR-DOC-2） |
 | 検証 | `./tests/smoke.sh` — 一時 target + `--target-config` で上記を固定 |

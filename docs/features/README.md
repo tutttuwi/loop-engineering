@@ -22,6 +22,7 @@
 | [loop-runner.md](./loop-runner.md) | `done` | `run-loop`・Ralph・promise・dry-run・`--status`・`run-meta.json`・`--resume` |
 | [target-config.md](./target-config.md) | `done` | `target.yaml`・`--target-name` / `--list-targets`（P2-4 / P5-2） |
 | [opencode-init.md](./opencode-init.md) | `done` | init / configure・生成される設定（tmpl は参考のみ） |
+| [multi-agent.md](./multi-agent.md) | `done` | OpenCode / Claude Code / Cursor Agent の切替 |
 | [ecc-sync.md](./ecc-sync.md) | `done` | ECC抽出・カスタム保護・マルチループ和集合 |
 | [issue-posting.md](./issue-posting.md) | `done` | Issue create/update・完了ゲート・CLI代替（P5-3 smoke） |
 | [permissions-unattended.md](./permissions-unattended.md) | `done` | ヘッドレス向け permission（一括 + サーバ別） |

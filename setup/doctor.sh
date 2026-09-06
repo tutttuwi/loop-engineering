@@ -18,14 +18,16 @@ source "${ROOT_DIR}/engine/lib/common.sh"
 target_config=""
 target_registry_name=""
 list_targets_only=0
+agent_cli=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --target-config) target_config="$2"; shift 2 ;;
     --target-name) target_registry_name="$2"; shift 2 ;;
     --list-targets) list_targets_only=1; shift ;;
+    --agent) agent_cli="$2"; shift 2 ;;
     -h|--help)
       cat >&2 <<'EOF'
-Usage: doctor.sh [--target-config <path> | --target-name <name>]
+Usage: doctor.sh [--target-config <path> | --target-name <name>] [--agent <name>]
        doctor.sh --list-targets
 EOF
       exit 0
@@ -72,8 +74,7 @@ echo "==================================================================="
 echo ""
 echo "--- 必須 ---------------------------------------------------------"
 check_required "Bun (open-ralph-wiggum実行に必須)" "bun" "https://bun.sh/ からインストール: curl -fsSL https://bun.sh/install | bash"
-check_required "Node.js/npx (opencode CLI, Marp CLI実行に必須)" "npx" "https://nodejs.org/ からインストール"
-check_required "opencode CLI" "opencode" "npm install -g opencode  (または https://opencode.ai/install からインストール)"
+check_required "Node.js/npx (Marp CLI / MCP npx 実行に必須)" "npx" "https://nodejs.org/ からインストール"
 check_required "git" "git" "https://git-scm.com/ からインストール"
 check_required "python3 (プロンプトテンプレート展開/JSON生成に使用)" "python3" "https://www.python.org/ からインストール"
 
@@ -124,15 +125,54 @@ else
 fi
 
 echo ""
-echo "--- ローカルLLM(LM Studio) -------------------------------------------"
-lmstudio_url="${LMSTUDIO_BASE_URL:-http://127.0.0.1:1234}"
-if command -v curl >/dev/null 2>&1 && curl -fsS -o /dev/null --max-time 2 "${lmstudio_url}/v1/models" 2>/dev/null; then
-  log_ok "LM Studio APIサーバーに接続できました (${lmstudio_url})"
+echo "--- ローカルLLM / エージェント CLI ------------------------------------"
+# target.yaml を先に解決して実行エージェントを決める(未作成でも default=opencode)
+_preview_yaml="$(resolve_target_config "$target_config" "$target_registry_name")" || true
+run_agent="$(resolve_loop_agent "$agent_cli" "${_preview_yaml:-}" "")" || {
+  run_agent="opencode"
+  err_count=$((err_count + 1))
+}
+log_info "実行エージェント: ${run_agent}"
+if agent_bin="$(resolve_agent_binary "$run_agent")"; then
+  log_ok "${run_agent} CLI: ${agent_bin}"
   ok_count=$((ok_count + 1))
 else
-  log_warn "LM Studio APIサーバーに接続できません (${lmstudio_url})。LM Studioでモデルをロードし、サーバーを起動してください"
-  warn_count=$((warn_count + 1))
+  log_error "${run_agent} CLI が見つかりません。$(agent_install_hint "$run_agent")"
+  err_count=$((err_count + 1))
 fi
+
+lmstudio_url="${LMSTUDIO_BASE_URL:-http://127.0.0.1:1234}"
+if [[ "$run_agent" == "opencode" ]]; then
+  if command -v curl >/dev/null 2>&1 && curl -fsS -o /dev/null --max-time 2 "${lmstudio_url}/v1/models" 2>/dev/null; then
+    log_ok "LM Studio APIサーバーに接続できました (${lmstudio_url})"
+    ok_count=$((ok_count + 1))
+  else
+    log_warn "LM Studio APIサーバーに接続できません (${lmstudio_url})。OpenCode+ローカルLLMのときはモデルをロードしサーバーを起動してください"
+    warn_count=$((warn_count + 1))
+  fi
+else
+  log_info "LM Studio 検査は OpenCode 実行時のみ (現在の agent=${run_agent})"
+fi
+case "$run_agent" in
+  claude-code)
+    if [[ -z "${ANTHROPIC_API_KEY:-}" ]] && [[ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
+      log_warn "ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN 未設定 — Claude Code の認証を確認してください"
+      warn_count=$((warn_count + 1))
+    else
+      log_ok "Claude Code 認証用環境変数: 設定済み"
+      ok_count=$((ok_count + 1))
+    fi
+    ;;
+  cursor-agent)
+    if [[ -z "${CURSOR_API_KEY:-}" ]]; then
+      log_warn "CURSOR_API_KEY 未設定 — ヘッドレス Cursor Agent では API キーが必要です"
+      warn_count=$((warn_count + 1))
+    else
+      log_ok "CURSOR_API_KEY: 設定済み"
+      ok_count=$((ok_count + 1))
+    fi
+    ;;
+esac
 
 echo ""
 echo "--- submodule ---------------------------------------------------------"
@@ -192,14 +232,75 @@ else
     target_path="$(cd "$target_path" && pwd)"
     log_ok "target_path: ${target_path}"
     ok_count=$((ok_count + 1))
-    opencode_json="${target_path}/.opencode/opencode.json"
-    if [[ ! -f "$opencode_json" ]]; then
-      log_error "未 init: ${opencode_json} がありません。./setup/init-target-project.sh を実行してください"
+    run_agent="$(resolve_loop_agent "$agent_cli" "$target_yaml" "")" || {
+      run_agent="opencode"
       err_count=$((err_count + 1))
-    else
-      log_ok "opencode.json: ${opencode_json}"
+    }
+    log_ok "target agent: ${run_agent}"
+    ok_count=$((ok_count + 1))
+
+    initialized=0
+    if target_agent_initialized "$target_path" "$run_agent"; then
+      initialized=1
+      log_ok "${run_agent} 向け init 済み"
       ok_count=$((ok_count + 1))
-      # PORTING: sync 痕跡（ECC 資材が対象へコピー済みか）
+    else
+      case "$run_agent" in
+        opencode)
+          log_error "未 init: ${target_path}/.opencode/opencode.json がありません。./setup/init-target-project.sh を実行してください"
+          ;;
+        claude-code)
+          log_error "未 init: ${target_path}/.claude/ がありません。./setup/init-target-project.sh --agent claude-code を実行してください"
+          ;;
+        cursor-agent)
+          log_error "未 init: ${target_path}/.cursor/rules/loop-engineering.mdc がありません。./setup/init-target-project.sh --agent cursor-agent を実行してください"
+          ;;
+        *)
+          log_warn "${run_agent} は専用 init レイアウト不要です（Ralph 通過エージェント）"
+          initialized=1
+          warn_count=$((warn_count + 1))
+          ;;
+      esac
+      if [[ "$initialized" -eq 0 ]]; then
+        err_count=$((err_count + 1))
+      fi
+    fi
+
+    # PORTING / P5-8: gitignore / 追跡 / ステージはエージェント共通
+    if target_has_loop_engineering_gitignore "$target_path"; then
+      log_ok ".gitignore に .loop-engineering/ あり"
+      ok_count=$((ok_count + 1))
+    else
+      log_warn ".gitignore に .loop-engineering/ がありません（init / run-loop が自動追加。手動追記も可）"
+      warn_count=$((warn_count + 1))
+    fi
+    if target_loop_engineering_is_tracked "$target_path"; then
+      log_warn ".loop-engineering が git に追跡されています — .gitignore と git rm -r --cached を確認"
+      warn_count=$((warn_count + 1))
+    else
+      if git -C "$target_path" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        log_ok ".loop-engineering は git 未追跡"
+        ok_count=$((ok_count + 1))
+      fi
+    fi
+    stage_report="${TMPDIR:-/tmp}/loop-eng-doctor-stage.$$"
+    if [[ -d "${target_path}/.loop-engineering/engine/lib" ]]; then
+      if check_staged_engine_lib_health "$target_path" "$stage_report"; then
+        log_ok "ステージ済み engine/lib は基盤と一致"
+        ok_count=$((ok_count + 1))
+      else
+        log_warn "ステージ済み engine/lib が基盤と乖離または欠落: $(tr '\n' ' ' <"$stage_report" 2>/dev/null || true)"
+        log_warn "  → ./setup/init-target-project.sh または run-loop で再同期"
+        warn_count=$((warn_count + 1))
+      fi
+    else
+      log_warn "ステージ未実施: ${target_path}/.loop-engineering/engine/lib がありません（初回 run-loop / init で同期）"
+      warn_count=$((warn_count + 1))
+    fi
+    rm -f "$stage_report" 2>/dev/null || true
+
+    opencode_json="${target_path}/.opencode/opencode.json"
+    if [[ "$run_agent" == "opencode" && -f "$opencode_json" ]]; then
       le_skills="${target_path}/.opencode/loop-engineering/skills"
       le_rules="${target_path}/.opencode/loop-engineering/rules"
       if [[ ! -d "$le_skills" && ! -d "$le_rules" ]]; then
@@ -209,41 +310,6 @@ else
         log_ok "loop-engineering 資材: .opencode/loop-engineering/ あり"
         ok_count=$((ok_count + 1))
       fi
-      # PORTING / P5-8: .gitignore に .loop-engineering/
-      if target_has_loop_engineering_gitignore "$target_path"; then
-        log_ok ".gitignore に .loop-engineering/ あり"
-        ok_count=$((ok_count + 1))
-      else
-        log_warn ".gitignore に .loop-engineering/ がありません（init / run-loop が自動追加。手動追記も可）"
-        warn_count=$((warn_count + 1))
-      fi
-      # P5-8: .loop-engineering が git 追跡されていないこと
-      if target_loop_engineering_is_tracked "$target_path"; then
-        log_warn ".loop-engineering が git に追跡されています — .gitignore と git rm -r --cached を確認"
-        warn_count=$((warn_count + 1))
-      else
-        if git -C "$target_path" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-          log_ok ".loop-engineering は git 未追跡"
-          ok_count=$((ok_count + 1))
-        fi
-      fi
-      # P5-8: ステージ済み engine/lib の健全性（無い場合は WARN = 未 stage、init/run-loop で同期）
-      stage_report="${TMPDIR:-/tmp}/loop-eng-doctor-stage.$$"
-      if [[ -d "${target_path}/.loop-engineering/engine/lib" ]]; then
-        if check_staged_engine_lib_health "$target_path" "$stage_report"; then
-          log_ok "ステージ済み engine/lib は基盤と一致"
-          ok_count=$((ok_count + 1))
-        else
-          log_warn "ステージ済み engine/lib が基盤と乖離または欠落: $(tr '\n' ' ' <"$stage_report" 2>/dev/null || true)"
-          log_warn "  → ./setup/init-target-project.sh または run-loop で再同期"
-          warn_count=$((warn_count + 1))
-        fi
-      else
-        log_warn "ステージ未実施: ${target_path}/.loop-engineering/engine/lib がありません（初回 run-loop / init で同期）"
-        warn_count=$((warn_count + 1))
-      fi
-      rm -f "$stage_report" 2>/dev/null || true
-      # PORTING: opencode.json に lmstudio provider
       has_lmstudio="$(python3 -c "
 import json,sys
 try:
@@ -294,6 +360,22 @@ except Exception:
       if [[ -n "$mcp_ovr" ]]; then
         log_ok "mcp permission overrides: ${mcp_ovr}"
         ok_count=$((ok_count + 1))
+      fi
+    elif [[ "$run_agent" == "claude-code" && "$initialized" -eq 1 ]]; then
+      if [[ -d "${target_path}/.claude/skills" || -d "${target_path}/.claude/agents" ]]; then
+        log_ok "Claude Code 資材: .claude/ あり"
+        ok_count=$((ok_count + 1))
+      else
+        log_warn "sync/init 痕跡が薄い: .claude/{skills,agents} がありません"
+        warn_count=$((warn_count + 1))
+      fi
+    elif [[ "$run_agent" == "cursor-agent" && "$initialized" -eq 1 ]]; then
+      if [[ -f "${target_path}/.cursor/rules/loop-engineering.mdc" ]]; then
+        log_ok "Cursor Agent 資材: .cursor/rules/loop-engineering.mdc あり"
+        ok_count=$((ok_count + 1))
+      else
+        log_warn "sync/init 痕跡が薄い: .cursor/rules/loop-engineering.mdc がありません"
+        warn_count=$((warn_count + 1))
       fi
     fi
   fi

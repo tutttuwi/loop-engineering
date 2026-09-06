@@ -263,13 +263,18 @@ copy_csv_items() {
       agent)
         local src_txt="${ECC_DIR}/.opencode/prompts/agents/${item}.txt"
         local src_md="${ECC_DIR}/agents/${item}.md"
+        local copied=0
         if [[ -f "$src_txt" ]]; then
           install_file "$src_txt" "${DEST_AGENTS}/${item}.txt" "agents/${item}.txt"
-          log_ok "agent取り込み: ${item}.txt"
-        elif [[ -f "$src_md" ]]; then
+          log_ok "agent取り込み(OpenCode): ${item}.txt"
+          copied=1
+        fi
+        if [[ -f "$src_md" ]]; then
           install_file "$src_md" "${DEST_AGENTS}/${item}.md" "agents/${item}.md"
-          log_warn "agent取り込み(OpenCode用.txtが無いためClaude Code形式.mdを使用): ${item}.md"
-        else
+          log_ok "agent取り込み(Claude Code): ${item}.md"
+          copied=1
+        fi
+        if [[ "$copied" -eq 0 ]]; then
           log_warn "agentが見つかりません(スキップ): ${item}"
         fi
         ;;

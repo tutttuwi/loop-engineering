@@ -7,9 +7,10 @@
 
 ## 要件定義（維持）
 
-1. ループ実行に必要な設定は **対象PJの** `.opencode/opencode.json` に集約する
+1. ループ実行に必要な設定は **対象PJ内** に集約する（OpenCode は `.opencode/opencode.json`）
 2. グローバル `~/.config/opencode/opencode.json` は任意（マシン全体の既定）
-3. LM Studio（OpenAI 互換）プロバイダと既定モデルを設定できる
+3. OpenCode 時: LM Studio（OpenAI 互換）プロバイダと既定モデルを設定できる
+4. Claude Code / Cursor Agent 時: ネイティブ skills/rules/MCP を init が書く（[multi-agent.md](./multi-agent.md)）
 4. MCP（github / gitlab / playwright / serena）と `lsp: true` を登録できる（opt-out 可）
 5. `project-config/{agents,skills,rules}` を対象の `.opencode/loop-engineering/` にコピーし、opencode.json から参照する
 6. 既存 opencode.json がある場合はバックアップしてから更新する

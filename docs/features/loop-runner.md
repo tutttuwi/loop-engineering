@@ -13,8 +13,8 @@
 - `--loop` で `loops/<name>/` を選択
 - `target.yaml` / `--target` / `--target-config` / `--target-name` で対象解決
 - プロンプト `{{VAR}}` 展開 → OUTPUT_DIR に保存
-- Ralph（`--agent opencode`）で反復、`--completion-promise` で完了検知
-- `--dry-run`, `--max-iterations`, `--min-iterations`, `--model`, `--extra`
+- Ralph（`--agent` は OpenCode / Claude Code / Cursor Agent 等）で反復、`--completion-promise` で完了検知
+- `--dry-run`, `--max-iterations`, `--min-iterations`, `--model`, `--agent`, `--extra`
 - `--status` で対象プロジェクト上の Ralph 状態表示（`--loop` 不要）
 - `--list-targets` でレジストリ一覧
 - `--resume` / `--resume-from <RUN_ID>` で前回 RUN の進捗を新 RUN に引き継ぐ

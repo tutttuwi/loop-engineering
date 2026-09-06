@@ -9,7 +9,9 @@
 name: _template
 description: 新規ループ追加用のひな形(このままでは実行できません)
 
-# ralphに渡すエージェント種別。基本的に opencode 固定でよい。
+# ralphに渡すエージェント種別のループ側既定。
+# 実行時の優先順位: run-loop --agent > target.yaml agent > この値
+#   opencode | claude-code | cursor-agent （Ralph通過: codex, copilot, qwen-code）
 agent: opencode
 
 # デフォルトのイテレーション数(engine/run-loop.sh の --max-iterations / --min-iterations で上書き可)

@@ -1,7 +1,7 @@
 # ループカタログ
 
-ループはすべて同じ枠組み（Ralph + OpenCode + 成果物パイプライン）で動き、  
-`./engine/run-loop.sh --loop <name>` の引数だけで切り替えます。
+ループはすべて同じ枠組み（Ralph + 選択したエージェント + 成果物パイプライン）で動き、  
+`./engine/run-loop.sh --loop <name>` の引数だけで切り替えます。エージェントは `--agent` / `target.yaml` の `agent`。
 
 複数ループを併用する場合、ECC sync は使うループを **一度に** 指定してください（和集合で 1 マニフェスト）。
 

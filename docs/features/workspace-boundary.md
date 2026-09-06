@@ -32,7 +32,9 @@ OpenCode / Ralph は **対象プロジェクトを cwd** にして動く。エ�
 
 ```
 <target>/
-├── .opencode/                 # OpenCode 設定（init）
+├── .opencode/                 # OpenCode 設定（init、opencode のとき）
+├── .claude/                   # Claude Code（init --agent claude-code）
+├── .cursor/                   # Cursor Agent（init --agent cursor-agent）
 └── .loop-engineering/         # ランタイム（gitignore）
     ├── engine/lib/            # report/video/tts 同期先 = {{ENGINE_ROOT}}/engine/lib
     └── output/<loop>/<RUN_ID>/  # = {{OUTPUT_DIR}}

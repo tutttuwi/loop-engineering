@@ -12,7 +12,7 @@
 - `--loop <name>` で `loop.yaml` の ecc_* を読む（**複数指定で和集合**）
 - `--all-loops` で `loops/*/loop.yaml`（`_template` 除外）をすべて和集合
 - `--list` で候補表示
-- コピー元（vendor）は直接編集しない方針
+- OpenCode 用 `.txt` と Claude Code 用 `.md` の両方がある agent は **両方コピー**する（init がそれぞれのレイアウトへ配る）
 - マニフェスト外のユーザーファイルは保護される
 
 ### マルチループ（重要）

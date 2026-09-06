@@ -20,7 +20,7 @@ cd ~/dev/loop-engineering
 cp project-config/target.yaml.example project-config/target.yaml
 # target_path を ~/dev/my-app に編集
 ./setup/sync-ecc-assets.sh --loop monkey-test
-./setup/init-target-project.sh   # target.yaml の target_path を使用(--target で上書き可)
+./setup/init-target-project.sh   # target.yaml の target_path を使用(--target / --agent で上書き可)
 ./engine/run-loop.sh --loop monkey-test
 ```
 
@@ -66,11 +66,14 @@ cd tools/loop-engineering
 `./setup/doctor.sh` がこれらの多くを WARN/ERROR で案内する（P5-7/P5-8）。ERROR 0 が移植完了の目安。
 
 - [ ] `./setup/doctor.sh` が ERROR 0
-- [ ] LM Studio（または互換API）に接続できる
-- [ ] `project-config/target.yaml` の `target_path` が実在する
+- [ ] 実行エージェント CLI がある（OpenCode / Claude Code / Cursor Agent の使う方）
+- [ ] OpenCode のとき: LM Studio（または互換API）に接続できる
+- [ ] `project-config/target.yaml` の `target_path`（と任意の `agent`）が実在する
 - [ ] `./setup/sync-ecc-assets.sh --loop <使うループ>` 済み
-- [ ] `./setup/init-target-project.sh` 済み（ループ必須。`--target` 省略時は target.yaml の `target_path`）
-- [ ] 対象の `.opencode/opencode.json` に `lmstudio` と必要な MCP がある
+- [ ] `./setup/init-target-project.sh` 済み（`--agent` / `--agents all` 可）
+- [ ] OpenCode のとき: 対象の `.opencode/opencode.json` に `lmstudio` と必要な MCP がある
+- [ ] Claude Code のとき: `.claude/CLAUDE.md` がある
+- [ ] Cursor Agent のとき: `.cursor/rules/loop-engineering.mdc` がある
 - [ ] `./engine/run-loop.sh --loop <name> --dry-run` でパスが正しい（`OUTPUT_DIR` が対象PJの `.loop-engineering/output/` 配下）
 - [ ] 対象PJの `.gitignore` に `.loop-engineering/` がある（init / run-loop が自動追加）
 - [ ] Issue 用トークン（`GITHUB_TOKEN` / `GITLAB_TOKEN`）を設定済み（投稿する場合）

@@ -3,7 +3,7 @@
 ## 目的
 
 「ループの枠組みは共通・アイデアは差し替え可能」な状態を保ちつつ、  
-ローカルLLM上の OpenCode エージェントを Ralph ループで反復させ、  
+OpenCode（ローカルLLM）または Claude Code / Cursor Agent CLI を Ralph ループで反復させ、  
 検証可能な成果物（findings / スライド / 動画 / Issue）まで到達させる。
 
 ## コンポーネント関係
@@ -18,10 +18,11 @@
 │  engine/run-loop.sh ──► prompt展開 ──► ralph (vendor/)      │
 │                              │              │               │
 │                              │              ▼               │
-│                              │         OpenCode CLI         │
-│                              │         (agent=opencode)     │
-│                              │              │               │
-│  project-config/ ────────────┼──► 対象PJ/.opencode/         │
+│                              │         OpenCode / Claude Code /        │
+│                              │         Cursor Agent CLI                │
+│                              │         (--agent で切替)                │
+│                              │              │                          │
+│  project-config/ ────────────┼──► 対象PJ/.opencode/  .claude/  .cursor/│
 │   agents/skills/rules        │         loop-engineering/    │
 │                              │         opencode.json        │
 │                              ▼              │               │
@@ -33,8 +34,8 @@
                                               │
                     ┌─────────────────────────┼──────────────┐
                     ▼                         ▼              ▼
-              LM Studio              Playwright MCP    GitHub/GitLab MCP
-           (local OpenAI API)         (ブラウザ操作)      (Issue/レビュー)
+         LM Studio / Claude / Cursor   Playwright MCP    GitHub/GitLab MCP
+           (選択したエージェント)         (ブラウザ操作)      (Issue/レビュー)
 ```
 
 ## 実行時の流れ（1ループ）
@@ -42,7 +43,7 @@
 1. `run-loop.sh` が `loops/<name>/loop.yaml` と `project-config/target.yaml` を読む
 2. 対象PJの `.loop-engineering/` に engine/lib を同期し、`output/<loop>/<RUN_ID>/` を作成（`--resume` 時は前回 RUN の進捗をコピーしてからシード）
 3. `prompt.md` の `{{VAR}}` を展開し、同ディレクトリの `prompt.md` に保存（`report-template.md` もコピー）
-4. 対象プロジェクトを cwd にして `bun vendor/open-ralph-wiggum/ralph.ts` を起動
+4. 対象プロジェクトを cwd にして `bun vendor/open-ralph-wiggum/ralph.ts --agent <resolved>` を起動
 5. Ralph が同じプロンプトを OpenCode に繰り返し渡し、`<promise>...</promise>` を待つ
 6. エージェントはファイル（`state.md` / `findings.md` 等）に進捗を残すため、次イテレーションで自己修正できる
 7. 十分集まったら Marp → スライド/PDF、ffmpeg → 動画、MCP → Issue
@@ -61,7 +62,7 @@
 
 ## ワークスペース境界（重要）
 
-OpenCode / Ralph は **対象プロジェクトを cwd** にして動きます。エージェントの Read/Write/Bash は、既定でプロジェクト外パスを `external_directory` として拒否します。
+OpenCode / Claude Code / Cursor Agent / Ralph は **対象プロジェクトを cwd** にして動きます。エージェントの Read/Write/Bash は、既定でプロジェクト外パスを拒否します。
 
 そのため次はすべて **対象PJ内** に置きます:
 
@@ -111,13 +112,15 @@ TTS 切替: `LOOP_TTS_ENGINE=say|voicevox|openai|none`
 2. 環境変数 `LOOP_TARGET_CONFIG`
 3. `project-config/target.yaml`
 
-**モデル**
+**モデル / エージェント**
 
-1. `run-loop.sh --model`
-2. 対象プロジェクトの `.opencode/opencode.json` の `model`（`init-target-project.sh` が設定）
-3. （任意）グローバル `~/.config/opencode/opencode.json` の `model`（`configure-opencode.sh`）
+1. `run-loop.sh --agent` / `--model`
+2. `target.yaml` の `agent`
+3. `loop.yaml` の `agent`（既定 `opencode`）
+4. OpenCode のとき: 対象の `.opencode/opencode.json` の `model`（`init-target-project.sh`）
+5. （任意）グローバル `~/.config/opencode/opencode.json`
 
-ループ実行時は対象プロジェクトを cwd にするため、通常は 2 で足ります。グローバル設定は任意です。
+詳細は [features/multi-agent.md](./features/multi-agent.md)。
 
 ## 設計上の制約（意図的）
 

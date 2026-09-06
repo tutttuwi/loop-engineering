@@ -6,24 +6,30 @@
 ## 全体フロー（この順番で）
 
 ```
-[1] 前提ツール導入
+[1] 前提ツール導入（Bun + 使うエージェント CLI）
 [2] ./setup/install.sh          … submodule + 診断
-[3] LM Studio 起動 + モデルロード
-[4] ./setup/configure-opencode.sh   … ★任意（グローバル設定）
-[5] project-config/target.yaml 作成
+[3] エージェント準備
+      OpenCode: LM Studio 起動 + モデルロード
+      Claude Code: `claude` ログイン / ANTHROPIC_API_KEY
+      Cursor Agent: `agent` 導入 + CURSOR_API_KEY
+[4] ./setup/configure-opencode.sh   … ★任意（OpenCode グローバル設定）
+[5] project-config/target.yaml 作成（agent: を選ぶ）
 [6] ./setup/sync-ecc-assets.sh --loop <name>
-[7] ./setup/init-target-project.sh [--target <path>]  … ★ループ用の必須設定はここ
-    （省略時は target.yaml の target_path を使用）
+[7] ./setup/init-target-project.sh [--agent <name>] [--agents all]
 [8] ./engine/run-loop.sh --loop <name> --dry-run
-[9] ./engine/run-loop.sh --loop <name>
+[9] ./engine/run-loop.sh --loop <name> [--agent <name>]
 ```
 
 ### 設定の置き場所（必須 / 任意）
 
 | 設定 | 場所 | ループ実行に必須か |
 | --- | --- | --- |
-| 対象プロジェクトの OpenCode 設定 | `<target>/.opencode/opencode.json`（`init-target-project.sh` が生成） | **必須** |
-| グローバル OpenCode 設定 | `~/.config/opencode/opencode.json`（`configure-opencode.sh` が更新） | **任意** |
+| 対象プロジェクトの OpenCode 設定 | `<target>/.opencode/opencode.json` | **OpenCode のとき必須** |
+| Claude Code 設定 | `<target>/.claude/` + `.mcp.json` | **claude-code のとき必須** |
+| Cursor Agent 設定 | `<target>/.cursor/rules/loop-engineering.mdc` | **cursor-agent のとき必須** |
+| グローバル OpenCode 設定 | `~/.config/opencode/opencode.json` | 任意 |
+
+エージェント切替の詳細は [features/multi-agent.md](./features/multi-agent.md)。
 
 ループは対象プロジェクトを cwd にして動くため、[7] まで完了していれば [4] はスキップして構いません。  
 [4] は「ホームディレクトリでも OpenCode + LM Studio / MCP を使いたい」場合の任意ステップです。
@@ -42,6 +48,12 @@ curl -fsSL https://bun.sh/install | bash
 curl -fsSL https://opencode.ai/install | bash
 # または: npm install -g opencode
 
+# Claude Code（使う場合）
+npm install -g @anthropic-ai/claude-code
+
+# Cursor Agent CLI（使う場合）
+curl https://cursor.com/install -fsS | bash
+
 # ffmpeg / jq（Node.js は nvm 等で導入済み想定）
 brew install ffmpeg jq
 ```
@@ -50,7 +62,9 @@ brew install ffmpeg jq
 
 ```bash
 bun --version
-opencode --version
+opencode --version   # OpenCode を使う場合
+claude --version     # Claude Code を使う場合
+agent --version || cursor-agent --version   # Cursor Agent を使う場合
 ffmpeg -version | head -1
 npx --version
 python3 --version
@@ -76,7 +90,11 @@ cd /path/to/loop-engineering
 
 ---
 
-## [3] LM Studio の準備
+## [3] エージェント準備
+
+使うバックエンドを1つ（または init `--agents all` で複数レイアウト）決める。
+
+### OpenCode + ローカルLLM
 
 1. [LM Studio](https://lmstudio.ai/) を起動
 2. コーディング向けモデルをダウンロードしてロード（例: Qwen3 Coder 等）
@@ -88,7 +106,24 @@ cd /path/to/loop-engineering
 curl -s http://127.0.0.1:1234/v1/models | head
 ```
 
-Ollama など他の OpenAI 互換サーバーでも可。その場合は次ステップで `--base-url` を合わせます。
+Ollama など他の OpenAI 互換サーバーでも可。その場合は init で `--lmstudio-base-url` を合わせます。
+
+### Claude Code
+
+```bash
+claude          # 初回はブラウザまたは ANTHROPIC_API_KEY でログイン
+export ANTHROPIC_API_KEY=sk-ant-...   # ヘッドレス時
+```
+
+### Cursor Agent CLI
+
+```bash
+curl https://cursor.com/install -fsS | bash
+export CURSOR_API_KEY=...             # ヘッドレス / CI 時
+agent --version                       # または cursor-agent
+```
+
+PATH に `agent` しか無い場合、run-loop が `RALPH_CURSOR_AGENT_BINARY` を自動設定します。
 
 ---
 
@@ -201,14 +236,18 @@ cp project-config/target.yaml.example project-config/target.yaml
 
 ## [7] 対象プロジェクトへの接続（ループ用の必須設定）
 
-ループ実行に必要な OpenCode 設定（LM Studio / MCP）は **ここで対象プロジェクトに書き込みます**。  
-[4] のグローバル設定をスキップしていても、このステップまで完了していればループは動けます。
-
 対象パスの優先順位: `--target` 引数 > `project-config/target.yaml` の `target_path`
 
 ```bash
-# target.yaml の target_path を使う場合(推奨)
+# target.yaml の target_path を使う場合(推奨)。agent は yaml の値（既定 opencode）
 ./setup/init-target-project.sh
+
+# Claude Code / Cursor レイアウト
+./setup/init-target-project.sh --agent claude-code
+./setup/init-target-project.sh --agent cursor-agent
+
+# 3レイアウトまとめて書き、実行時に --agent で切替
+./setup/init-target-project.sh --agents all
 
 # パスを明示する場合(CLIが優先され、target.yaml も更新される)
 ./setup/init-target-project.sh --target /path/to/your-project \
@@ -218,9 +257,12 @@ cp project-config/target.yaml.example project-config/target.yaml
 
 これが行うこと:
 
-- `project-config/{agents,skills,rules}` → `<target>/.opencode/loop-engineering/` へコピー
-- `<target>/.opencode/opencode.json` を生成（LM Studio / github / gitlab / playwright / serena MCP / `lsp: true`）
-- `project-config/target.yaml` の `target_path` 等を更新
+- `init_agents` に **opencode** が含まれるとき:
+  - `project-config/{agents,skills,rules}` → `<target>/.opencode/loop-engineering/`
+  - `<target>/.opencode/opencode.json`（LM Studio / MCP / lsp）
+- **claude-code**: `.claude/` と `.mcp.json`
+- **cursor-agent**: `.cursor/rules/loop-engineering.mdc` / skills / mcp.json
+- `project-config/target.yaml` の `target_path` / `agent` 等を更新
 
 既存の `opencode.json` がある場合は `.bak.<timestamp>` にバックアップします。  
 個別にオフにする場合: `--without-github` / `--without-gitlab` / `--without-playwright` / `--without-serena` / `--without-lsp`  
@@ -254,6 +296,8 @@ cp project-config/target.yaml.example project-config/target.yaml
 
 # よく使うオプション
 ./engine/run-loop.sh --loop yabaiyo --max-iterations 20
+./engine/run-loop.sh --loop yabaiyo --agent cursor-agent
+./engine/run-loop.sh --loop yabaiyo --agent claude-code
 ./engine/run-loop.sh --loop pr-review --model lmstudio/qwen3-coder-30b
 ./engine/run-loop.sh --loop security-audit --max-iterations 20
 ./engine/run-loop.sh --loop deps-audit --max-iterations 15
@@ -323,7 +367,9 @@ export LOOP_TTS_ENGINE=none   # Linux で無音にする場合など
 | 症状 | 対処 |
 | --- | --- |
 | `ralph.ts が見つかりません` | `./setup/bootstrap-submodules.sh` |
-| `ProviderModelNotFoundError` | 対象の `.opencode/opencode.json` に `lmstudio` があるか確認。なければ `init-target-project.sh` を再実行。グローバルを使う場合のみ `configure-opencode.sh` |
+| `ProviderModelNotFoundError` | OpenCode: 対象の `.opencode/opencode.json` に `lmstudio` があるか確認。なければ `init-target-project.sh` を再実行 |
+| エージェント CLI が無い | doctor のヒントに従う。Cursor は `agent` と `cursor-agent` の両方を探す |
+| Claude/Cursor で Issue が作れない | MCP 未設定なら `--issue-fallback cli`。`gh` / `GITHUB_TOKEN` を確認 |
 | LM Studio に繋がらない | モデルロードと Local Server 起動を確認。`curl .../v1/models` |
 | Playwright が動かない | `init-target-project.sh` 実行済みか、対象の `opencode.json` に `mcp.playwright` があるか確認 |
 | 動画生成失敗 | `brew install ffmpeg`。TTSは `LOOP_TTS_ENGINE=none` で無音動画にもできる。Linux で `say` が無い場合、未設定なら既定は `none`（VOICEVOX 起動中なら `voicevox`） |
@@ -348,6 +394,6 @@ export LOOP_TTS_ENGINE=none   # Linux で無音にする場合など
 | `setup/doctor.sh` | 依存診断 | いつでも |
 | `setup/configure-opencode.sh` | **任意:** グローバル `~/.config/opencode/opencode.json` | マシン全体で OpenCode を使うとき |
 | `setup/sync-ecc-assets.sh` | ECC → project-config | ループ追加・資材更新時 |
-| `setup/init-target-project.sh` | **ループ必須:** 対象PJへ opencode/MCP 設定 | 対象PJ変更時（`--mcp-permission allow` で無人向け） |
+| `setup/init-target-project.sh` | **ループ必須:** 対象PJへエージェント設定 | `--agent` / `--agents all`。OpenCode 時は `--mcp-permission allow` で無人向け |
 | `setup/new-loop.sh` | `_template` から新ループ作成 | アイデア追加時 |
 | `engine/list-runs.sh` / `clean-runs.sh` | 成果物の一覧・掃除 | 運用中 |

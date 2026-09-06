@@ -30,6 +30,18 @@ repo_url: https://github.com/your-org/your-repo
 # 対象プロジェクトの既定ブランチ
 default_branch: main
 
+# Ralph に渡す実行エージェント (省略時は loop.yaml の agent、さらに無ければ opencode)
+#   opencode       OpenCode + ローカルLLM (LM Studio 等)
+#   claude-code    Anthropic Claude Code CLI (`claude`)
+#   cursor-agent   Cursor Agent CLI (`agent` / `cursor-agent`)
+# エイリアス: claude, cursor, local
+# CLI が最優先: ./engine/run-loop.sh --agent cursor-agent
+agent: opencode
+
+# init が対象PJへ書くレイアウト (省略時は上の agent のみ)
+#   all または opencode,claude-code,cursor-agent
+# init_agents: all
+
 # モンキーテストループで操作する対象URL(フロントエンド/モバイルアプリのプレビューURL等)
 monkey_test_target_url: http://localhost:3000
 

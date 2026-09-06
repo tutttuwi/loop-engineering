@@ -21,6 +21,8 @@
 | `pr_review_target` | pr-review 対象 |
 | `issue_post_mode` | `create` / `update` |
 | `issue_target` | update 時の Issue |
+| `agent` | 実行エージェント（`opencode` / `claude-code` / `cursor-agent`）。省略時は loop.yaml |
+| `init_agents` | init が書くレイアウト CSV または `all`。省略時は `agent` のみ |
 | `mcp_permission` | `ask` / `allow` / `deny` |
 | `mcp_permission_overrides` | 任意。`github=allow,playwright=deny` 形式（サーバ別 → OpenCode `permission.<server>_*`） |
 
