@@ -30,7 +30,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=./lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
 
-RALPH_ENTRY="${ROOT_DIR}/vendor/open-ralph-wiggum/ralph.ts"
+RALPH_ENTRY="${RALPH_ENTRY:-${ROOT_DIR}/vendor/open-ralph-wiggum/ralph.ts}"
 
 usage() {
   cat >&2 <<EOF

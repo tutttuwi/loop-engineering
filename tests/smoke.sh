@@ -728,6 +728,10 @@ fi
 # --- multi-loop ECC sync union ---------------------------------------------
 echo ""
 echo "--- multi-loop ECC sync union -----------------------------------------"
+if [[ ! -f "${ROOT_DIR}/vendor/ecc/rules/README.md" ]]; then
+  log_ok "skip ECC sync tests (vendor/ecc not initialized)"
+  pass=$((pass + 1))
+else
 ecc_dest="${TMP_ROOT}/ecc-dest"
 mkdir -p "${ecc_dest}/rules/common"
 # 初回 sync（マニフェスト作成）— monkey-test + security-audit の和集合
@@ -858,6 +862,7 @@ else
   log_error "--all-loops manifest incomplete"
   fail=$((fail + 1))
 fi
+fi # vendor/ecc available
 
 # --- artifact lifecycle: list-runs / clean-runs (P4-2) ---------------------
 echo ""
@@ -1378,8 +1383,13 @@ chmod +x "${fb_bin}/opencode"
 cp "${issue_bin}/gh" "${fb_bin}/gh"
 chmod +x "${fb_bin}/gh"
 
+# Ralph 本体は bun stub が肩代わりする。submodule 無しの CI でも経路を通す。
+dummy_ralph="${TMP_ROOT}/dummy-ralph.ts"
+printf '// smoke stub\n' >"$dummy_ralph"
+
 set +e
 PATH="${fb_bin}:${PATH}" \
+  RALPH_ENTRY="$dummy_ralph" \
   "${ROOT_DIR}/engine/run-loop.sh" \
     --loop monkey-test \
     --target-config "$fb_yaml" \
