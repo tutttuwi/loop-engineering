@@ -18,6 +18,7 @@
 | `repo_url` | Issue 投稿先 |
 | `default_branch` | 既定ブランチ |
 | `monkey_test_target_url` | monkey-test 用 URL |
+| `monkey_test_accounts` | 任意。テスト用アカウント（`role` または `role|login|secret` のカンマ区切り。本番アカウント禁止） |
 | `pr_review_target` | pr-review 対象 |
 | `issue_post_mode` | `create` / `update` |
 | `issue_target` | update 時の Issue |

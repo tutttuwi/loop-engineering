@@ -44,7 +44,7 @@
 3. `prompt.md` の `{{VAR}}` を展開し、同ディレクトリの `prompt.md` に保存（`report-template.md` もコピー）
 4. 対象プロジェクトを cwd にして `bun vendor/open-ralph-wiggum/ralph.ts` を起動
 5. Ralph が同じプロンプトを OpenCode に繰り返し渡し、`<promise>...</promise>` を待つ
-6. エージェントはファイル（`state.md` / `findings.md` 等）に進捗を残すため、次イテレーションで自己修正できる
+6. エージェントはファイル（`state.md` / `app-model.md` / `scenarios.md` / `findings.md` 等）に進捗を残すため、次イテレーションで自己修正できる
 7. 十分集まったら Marp → スライド/PDF、ffmpeg → 動画、MCP → Issue
 
 ## ディレクトリ責務
