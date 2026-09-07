@@ -27,6 +27,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=./lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck source=./lib/gate.sh
+source "$SCRIPT_DIR/lib/gate.sh"
 
 RALPH_ENTRY="${ROOT_DIR}/vendor/open-ralph-wiggum/ralph.ts"
 
@@ -60,6 +62,9 @@ Usage:
   --resume-from <RUN_ID>   指定 RUN_ID の進捗を引き継ぐ(--resume と排他)
   --status                 対象プロジェクト上の Ralph 状態を表示する(--loop 不要)
   --extra "<args>"         ralph CLIにそのまま追加で渡す引数
+  --allow-l3               autonomy_level=L3 の無人実行を許可(既定は拒否)
+  --skip-worktree-gate     L1ソース改変 / denylist のホスト検証をスキップする
+  --skip-budget-gate       日次 max_runs_per_day のホスト検証をスキップする
   -h, --help               このヘルプを表示
 
 終了コード: 0=成功 / 1=ホスト側失敗 / その他=Ralph の終了コード
@@ -106,6 +111,9 @@ status_only=0
 list_targets_only=0
 post_report=0
 post_report_always=0
+allow_l3=0
+skip_worktree_gate=0
+skip_budget_gate=0
 extra_args=""
 RUN_META_PATH=""
 RUN_META_STARTED_AT=""
@@ -116,6 +124,17 @@ RUN_META_RESUMED_FROM=""
 
 _run_meta_finalize() {
   local ec="${1:-0}"
+  # RUN_META_PATH がある = OUTPUT_DIR を切った実行。日次予算拒否など起動前失敗は記録しない。
+  if [[ -n "${RUN_META_PATH:-}" && -n "${runtime_root:-}" && -n "${loop_name:-}" && -n "${run_id:-}" ]]; then
+    append_loop_run_log \
+      "${runtime_root}/loop-run-log.md" \
+      "$loop_name" \
+      "$run_id" \
+      "${RUN_META_AUTONOMY_LEVEL:-L1}" \
+      "${RUN_META_DRY_RUN:-false}" \
+      "$ec" \
+      "${RUN_META_RESUMED_FROM:-}" || true
+  fi
   if [[ -n "${RUN_META_PATH:-}" ]]; then
     write_run_meta_json "$RUN_META_PATH" "$ec" || true
   fi
@@ -158,6 +177,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     --status) status_only=1; shift ;;
     --extra) extra_args="$2"; shift 2 ;;
+    --allow-l3) allow_l3=1; shift ;;
+    --skip-worktree-gate) skip_worktree_gate=1; shift ;;
+    --skip-budget-gate) skip_budget_gate=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) log_error "不明な引数: $1"; usage; exit 1 ;;
   esac
@@ -209,6 +231,12 @@ resolved="$(resolve_target_path "$target_config" "$target_override" "$target_reg
 target_path="${resolved%%$'\t'*}"
 target_yaml="${resolved#*$'\t'}"
 
+require_loop_not_paused "$ROOT_DIR" "$target_path" || exit 1
+autonomy_level="$(normalize_autonomy_level "$(yaml_get "$loop_yaml" "autonomy_level" "L1")")" || exit 1
+assert_autonomy_allowed "$autonomy_level" "$allow_l3" || exit 1
+RUN_META_AUTONOMY_LEVEL="$autonomy_level"
+export LOOP_AUTONOMY_LEVEL="$autonomy_level"
+
 # --- 各種パラメータ解決 ----------------------------------------------------
 target_name="$(yaml_get "$target_yaml" "target_name" "$(basename "$target_path")")"
 repo_provider="${issue_tracker_override:-$(yaml_get "$target_yaml" "repo_provider" "github")}"
@@ -226,6 +254,7 @@ completion_promise="$(yaml_get "$loop_yaml" "completion_promise" "COMPLETE")"
 agent="$(yaml_get "$loop_yaml" "agent" "opencode")"
 require_issue="$(yaml_get "$loop_yaml" "require_issue" "true")"
 seed_files_csv="$(yaml_get "$loop_yaml" "seed_files" "")"
+max_runs_per_day="$(yaml_get "$loop_yaml" "max_runs_per_day" "2")"
 
 run_id="$(timestamp)"
 
@@ -240,6 +269,15 @@ stage_engine_lib_into_target "$target_path"
 runtime_root="${target_path}/.loop-engineering"
 loop_out_root="${runtime_root}/output/${loop_name}"
 output_dir="${loop_out_root}/${run_id}"
+
+_skip_budget="$skip_budget_gate"
+_env_skip_budget="$(printf '%s' "${LOOP_SKIP_BUDGET_GATE:-}" | tr '[:upper:]' '[:lower:]')"
+case "$_env_skip_budget" in
+  1|true|yes|on) _skip_budget=1 ;;
+esac
+if [[ "$dry_run" -eq 0 && "$_skip_budget" -eq 0 ]]; then
+  assert_daily_run_budget "${runtime_root}/loop-run-log.md" "$loop_name" "$max_runs_per_day" || exit 1
+fi
 
 resume_src=""
 resume_src_id=""
@@ -344,9 +382,13 @@ EOF
 fi
 
 export RESUME_FROM_RUN_ID="${resume_src_id:-}"
+export LOOP_AUTONOMY_LEVEL="$autonomy_level"
 
 rendered_prompt="${output_dir}/prompt.md"
 "${SCRIPT_DIR}/lib/render-prompt.sh" "$prompt_template" > "$rendered_prompt"
+
+guardrails="$(build_loop_guardrails "$autonomy_level" "${ROOT_DIR}/loop-constraints.md" "${ROOT_DIR}/gate.yaml")"
+prepend_block_to_file "$rendered_prompt" "$guardrails" || exit 1
 
 if [[ -n "$resume_src_id" ]]; then
   copied_csv=""
@@ -362,6 +404,8 @@ if [[ -n "$resume_src_id" ]]; then
 fi
 
 log_info "ループ            : ${loop_name}"
+log_info "自律度            : ${autonomy_level}"
+log_info "日次実行上限      : ${max_runs_per_day} (0=無制限)"
 log_info "対象プロジェクト  : ${target_path} (${target_name})"
 log_info "Issue投稿先種別   : ${repo_provider}"
 log_info "Issue投稿モード   : ${issue_post_mode}$([[ -n "$issue_target" ]] && echo " (target=${issue_target})" || true)"
@@ -405,12 +449,33 @@ if [[ -n "$extra_args" ]]; then
   ralph_cmd+=("${extra_arr[@]}")
 fi
 
+worktree_snap="${output_dir}/worktree-snapshot.tsv"
+_skip_wt="$skip_worktree_gate"
+_env_skip_wt="$(printf '%s' "${LOOP_SKIP_WORKTREE_GATE:-}" | tr '[:upper:]' '[:lower:]')"
+case "$_env_skip_wt" in
+  1|true|yes|on) _skip_wt=1 ;;
+esac
+if [[ "$_skip_wt" -eq 0 ]]; then
+  snapshot_target_worktree "$target_path" "$worktree_snap" || exit 1
+fi
+
 log_info "実行コマンド: ${ralph_cmd[*]} (cwd=${target_path})"
 ralph_rc=0
 (
   cd "$target_path"
   "${ralph_cmd[@]}"
 ) || ralph_rc=$?
+
+if [[ "$_skip_wt" -eq 0 ]]; then
+  if ! enforce_worktree_gate \
+    "$target_path" \
+    "$worktree_snap" \
+    "$autonomy_level" \
+    "${ROOT_DIR}/gate.yaml" \
+    "${output_dir}/worktree-violations.txt"; then
+    exit 1
+  fi
+fi
 
 # latest シンボリックリンク(成功時)
 loop_out_root="${runtime_root}/output/${loop_name}"

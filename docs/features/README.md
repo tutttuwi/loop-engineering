@@ -30,6 +30,8 @@
 | [porting-and-update.md](./porting-and-update.md) | `done` | 移植・`update.sh`（P5-4 smoke） |
 | [artifact-lifecycle.md](./artifact-lifecycle.md) | `done` | list-runs / clean-runs / latest（P4-2 smoke） |
 | [bundled-loops.md](./bundled-loops.md) | `done` | 同梱ループ + `validate_loop_dir` / new-loop（P5-5） |
+| [loop-safety.md](./loop-safety.md) | `done` | L1–L3・kill switch・denylist・実行ログ |
+| [cobusgreyling-reference.md](./cobusgreyling-reference.md) | `done` | パターン参考 submodule |
 
 ## 読者別の読み方
 

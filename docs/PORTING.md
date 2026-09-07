@@ -56,7 +56,7 @@ cd tools/loop-engineering
 | `project-config/agents/` `skills/` | 必要なら追加 | ECC同期後にカスタム可 |
 | `loops/<name>/` | アイデア追加時のみ | 共通ループはそのまま使える |
 | `engine/` | 触らない | 共通実行枠 |
-| `vendor/` | 触らない | submodule（upstream） |
+| `vendor/` | 触らない | submodule（Ralph / ECC / cobusgreyling 参考） |
 | `setup/` | 触らない | セットアップ共通 |
 
 ---

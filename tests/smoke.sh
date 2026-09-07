@@ -9,6 +9,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=../engine/lib/common.sh
 source "${ROOT_DIR}/engine/lib/common.sh"
+# shellcheck source=../engine/lib/gate.sh
+source "${ROOT_DIR}/engine/lib/gate.sh"
 
 pass=0
 fail=0
@@ -1714,6 +1716,336 @@ if grep -q '\.loop-engineering が git に追跡されています' "${TMP_ROOT}
 else
   log_error "doctor tracked-.loop-engineering check failed"
   sed -n '1,80p' "${TMP_ROOT}/doc-track.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+# --- loop safety: kill switch / autonomy / guardrails / run log ------------
+echo ""
+echo "--- loop safety (gate.sh) ---------------------------------------------"
+assert_eq "normalize default L1" "$(normalize_autonomy_level "")" "L1"
+assert_eq "normalize l2" "$(normalize_autonomy_level "l2")" "L2"
+assert_fail "normalize rejects L9" normalize_autonomy_level "L9"
+assert_ok "L1 always allowed" assert_autonomy_allowed L1 0
+assert_fail "L3 denied without flag" assert_autonomy_allowed L3 0
+assert_ok "L3 allowed with flag" assert_autonomy_allowed L3 1
+_saved_pause="${LOOP_PAUSE_ALL-__unset__}"
+export LOOP_PAUSE_ALL=1
+assert_ok "LOOP_PAUSE_ALL pauses" is_loop_paused "$ROOT_DIR" "$target_dir"
+assert_fail "require_loop_not_paused fails when paused" require_loop_not_paused "$ROOT_DIR" "$target_dir"
+unset LOOP_PAUSE_ALL || true
+assert_fail "not paused by default" is_loop_paused "$ROOT_DIR" "$target_dir"
+pause_file="${TMP_ROOT}/pause-root/.loop-pause"
+mkdir -p "$(dirname "$pause_file")"
+: >"$pause_file"
+assert_ok "root .loop-pause pauses" is_loop_paused "$(dirname "$pause_file")" "$target_dir"
+target_pause="${target_dir}/.loop-engineering/.loop-pause"
+: >"$target_pause"
+assert_ok "target .loop-pause pauses" is_loop_paused "$ROOT_DIR" "$target_dir"
+rm -f "$target_pause"
+if [[ "$_saved_pause" == "__unset__" ]]; then
+  unset LOOP_PAUSE_ALL || true
+else
+  export LOOP_PAUSE_ALL="$_saved_pause"
+fi
+
+set +e
+LOOP_PAUSE_ALL=1 "${ROOT_DIR}/engine/run-loop.sh" \
+  --loop monkey-test \
+  --target-config "$target_yaml" \
+  --dry-run \
+  >"${TMP_ROOT}/pause-run.out" 2>"${TMP_ROOT}/pause-run.err"
+pause_run_rc=$?
+set -e
+if [[ "$pause_run_rc" -ne 0 ]] && grep -q '一時停止' "${TMP_ROOT}/pause-run.err"; then
+  log_ok "run-loop dry-run honors LOOP_PAUSE_ALL"
+  pass=$((pass + 1))
+else
+  log_error "run-loop kill switch not enforced (rc=${pause_run_rc})"
+  sed -n '1,40p' "${TMP_ROOT}/pause-run.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+l3_dir="${TMP_ROOT}/l3-loop"
+mkdir -p "$l3_dir"
+cp "${ROOT_DIR}/loops/_template/prompt.md" "${l3_dir}/prompt.md"
+cp "${ROOT_DIR}/loops/_template/report-template.md" "${l3_dir}/report-template.md"
+cat >"${l3_dir}/loop.yaml" <<'EOF'
+name: l3-smoke
+description: l3 smoke
+agent: opencode
+max_iterations: 2
+min_iterations: 1
+completion_promise: L3_SMOKE_COMPLETE
+autonomy_level: L3
+require_issue: false
+prompt_file: prompt.md
+report_template: report-template.md
+EOF
+assert_ok "validate L3 loop.yaml" validate_loop_dir "$l3_dir"
+bad_auto="${TMP_ROOT}/bad-auto"
+mkdir -p "$bad_auto"
+cp "${l3_dir}/prompt.md" "${bad_auto}/prompt.md"
+cp "${l3_dir}/report-template.md" "${bad_auto}/report-template.md"
+sed 's/autonomy_level: L3/autonomy_level: L9/' "${l3_dir}/loop.yaml" >"${bad_auto}/loop.yaml"
+# name key still l3-smoke; validation only checks enum
+assert_fail "validate rejects autonomy_level L9" validate_loop_dir "$bad_auto"
+
+# bundled dry-run prompt contains host guardrails + run-meta autonomy + run log
+mt_prompt="$(find "${target_dir}/.loop-engineering/output/monkey-test" -name prompt.md 2>/dev/null | head -n1)"
+if [[ -n "$mt_prompt" ]] \
+  && grep -q 'Loop Guardrails' "$mt_prompt" \
+  && grep -q 'レポート専用' "$mt_prompt" \
+  && grep -q 'Maker/Checker' "$mt_prompt" \
+  && grep -q 'max_runs_per_day' "$mt_prompt"; then
+  log_ok "dry-run prompt prepends L1 Loop Guardrails"
+  pass=$((pass + 1))
+else
+  log_error "dry-run prompt missing Loop Guardrails"
+  [[ -n "$mt_prompt" ]] && sed -n '1,40p' "$mt_prompt" >&2 || true
+  fail=$((fail + 1))
+fi
+
+if [[ -n "$meta_run" ]] && grep -q '"autonomy_level": "L1"' "$meta_run"; then
+  log_ok "run-meta.json records autonomy_level L1"
+  pass=$((pass + 1))
+else
+  log_error "run-meta.json missing autonomy_level"
+  [[ -n "$meta_run" ]] && sed -n '1,40p' "$meta_run" >&2 || true
+  fail=$((fail + 1))
+fi
+
+if [[ -f "${target_dir}/.loop-engineering/loop-run-log.md" ]] \
+  && grep -q 'monkey-test' "${target_dir}/.loop-engineering/loop-run-log.md"; then
+  log_ok "dry-run appends target loop-run-log.md"
+  pass=$((pass + 1))
+else
+  log_error "loop-run-log.md missing after dry-run"
+  fail=$((fail + 1))
+fi
+
+echo ""
+echo "--- worktree gate (L1 / denylist) -------------------------------------"
+assert_ok "glob **/.env matches .env" path_matches_glob ".env" "**/.env"
+assert_ok "glob **/.env matches nested" path_matches_glob "cfg/.env" "**/.env"
+assert_fail "glob **/.env rejects .env.local" path_matches_glob ".env.local" "**/.env"
+assert_ok "glob **/.env.* matches .env.local" path_matches_glob ".env.local" "**/.env.*"
+assert_ok "glob **/auth/** matches src/auth/x" path_matches_glob "src/auth/login.py" "**/auth/**"
+assert_fail "glob **/auth/** rejects authorize.py" path_matches_glob "src/authorize.py" "**/auth/**"
+
+wt_root="${TMP_ROOT}/wt-tree"
+mkdir -p "${wt_root}/src" "${wt_root}/.loop-engineering/out"
+printf 'orig\n' >"${wt_root}/src/app.py"
+wt_snap="${TMP_ROOT}/wt-snap.tsv"
+assert_ok "snapshot worktree" snapshot_target_worktree "$wt_root" "$wt_snap"
+printf 'runtime\n' >"${wt_root}/.loop-engineering/out/findings.md"
+assert_ok "L1 allows runtime-only writes" \
+  enforce_worktree_gate "$wt_root" "$wt_snap" "L1" "${ROOT_DIR}/gate.yaml" "${TMP_ROOT}/wt-ok.txt"
+printf 'pwned\n' >"${wt_root}/src/app.py"
+assert_fail "L1 rejects source edit" \
+  enforce_worktree_gate "$wt_root" "$wt_snap" "L1" "${ROOT_DIR}/gate.yaml" "${TMP_ROOT}/wt-l1.txt"
+if grep -q 'trigger: l1-source' "${TMP_ROOT}/wt-l1.txt"; then
+  log_ok "L1 violation report records l1-source"
+  pass=$((pass + 1))
+else
+  log_error "L1 report missing l1-source trigger"
+  fail=$((fail + 1))
+fi
+printf 'orig\n' >"${wt_root}/src/app.py"
+printf 'secret\n' >"${wt_root}/.env"
+assert_fail "denylist rejects .env even at L2" \
+  enforce_worktree_gate "$wt_root" "$wt_snap" "L2" "${ROOT_DIR}/gate.yaml" "${TMP_ROOT}/wt-den.txt"
+if grep -q 'trigger: denylist' "${TMP_ROOT}/wt-den.txt"; then
+  log_ok "denylist violation report records denylist"
+  pass=$((pass + 1))
+else
+  log_error "denylist report missing trigger"
+  fail=$((fail + 1))
+fi
+
+wt_run_target="${TMP_ROOT}/wt-run-target"
+mkdir -p "${wt_run_target}/src" "${wt_run_target}/.opencode"
+printf '{}\n' >"${wt_run_target}/.opencode/opencode.json"
+printf 'clean\n' >"${wt_run_target}/src/app.py"
+wt_run_yaml="${TMP_ROOT}/wt-run.yaml"
+cat >"$wt_run_yaml" <<EOF
+target_path: ${wt_run_target}
+target_name: wt-run
+repo_provider: github
+repo_url: https://github.com/example/wt-run
+default_branch: main
+issue_post_mode: create
+mcp_permission: ask
+EOF
+wt_bin="${TMP_ROOT}/wt-bin"
+mkdir -p "$wt_bin"
+cat >"${wt_bin}/bun" <<'EOF'
+#!/usr/bin/env bash
+printf 'pwned-by-ralph\n' > src/app.py
+exit 0
+EOF
+chmod +x "${wt_bin}/bun"
+set +e
+PATH="${wt_bin}:${PATH}" \
+  "${ROOT_DIR}/engine/run-loop.sh" \
+    --loop monkey-test \
+    --target-config "$wt_run_yaml" \
+    --skip-issue-gate \
+  >"${TMP_ROOT}/wt-run.out" 2>"${TMP_ROOT}/wt-run.err"
+wt_run_rc=$?
+set -e
+wt_viol="$(find "${wt_run_target}/.loop-engineering/output/monkey-test" -name worktree-violations.txt 2>/dev/null | head -n1)"
+if [[ "$wt_run_rc" -ne 0 ]] \
+  && [[ -n "$wt_viol" ]] \
+  && grep -q 'trigger: l1-source' "$wt_viol"; then
+  log_ok "run-loop L1 worktree gate blocks source edit (stub bun)"
+  pass=$((pass + 1))
+else
+  log_error "run-loop L1 worktree gate did not block (rc=${wt_run_rc})"
+  sed -n '1,60p' "${TMP_ROOT}/wt-run.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+printf 'clean\n' >"${wt_run_target}/src/app.py"
+set +e
+PATH="${wt_bin}:${PATH}" \
+  "${ROOT_DIR}/engine/run-loop.sh" \
+    --loop monkey-test \
+    --target-config "$wt_run_yaml" \
+    --skip-issue-gate \
+    --skip-worktree-gate \
+  >"${TMP_ROOT}/wt-skip.out" 2>"${TMP_ROOT}/wt-skip.err"
+wt_skip_rc=$?
+set -e
+if [[ "$wt_skip_rc" -eq 0 ]]; then
+  log_ok "--skip-worktree-gate bypasses L1 source check"
+  pass=$((pass + 1))
+else
+  log_error "--skip-worktree-gate still failed (rc=${wt_skip_rc})"
+  sed -n '1,40p' "${TMP_ROOT}/wt-skip.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+echo ""
+echo "--- daily run budget (max_runs_per_day) ------------------------------"
+budget_today="$(python3 -c 'import datetime as d; print(d.datetime.now(d.timezone.utc).strftime("%Y-%m-%d"))')"
+budget_yday="$(python3 -c 'import datetime as d; print((d.datetime.now(d.timezone.utc)-d.timedelta(days=1)).strftime("%Y-%m-%d"))')"
+budget_log="${TMP_ROOT}/budget-log.md"
+cat >"$budget_log" <<EOF
+# Loop Run Log
+
+| timestamp (UTC) | loop | run_id | autonomy | dry_run | exit_code | resumed_from |
+| --- | --- | --- | --- | --- | --- | --- |
+| ${budget_today}T00:00:01Z | monkey-test | r1 | L1 | false | 0 | |
+| ${budget_today}T01:00:00Z | monkey-test | r2 | L1 | false | 1 | |
+| ${budget_today}T02:00:00Z | monkey-test | r-dry | L1 | true | 0 | |
+| ${budget_today}T03:00:00Z | yabaiyo | r-other | L1 | false | 0 | |
+| ${budget_yday}T23:00:00Z | monkey-test | r-old | L1 | false | 0 | |
+EOF
+assert_eq "count today production (exclude dry/other/yesterday)" \
+  "$(count_loop_runs_today "$budget_log" "monkey-test")" "2"
+assert_eq "count missing log is 0" \
+  "$(count_loop_runs_today "${TMP_ROOT}/no-such-run-log.md" "monkey-test")" "0"
+assert_fail "assert budget 2/2 rejects" assert_daily_run_budget "$budget_log" "monkey-test" "2"
+assert_ok "assert budget max=0 unlimited" assert_daily_run_budget "$budget_log" "monkey-test" "0"
+assert_ok "assert budget yabaiyo still under cap" assert_daily_run_budget "$budget_log" "yabaiyo" "2"
+
+bad_budget="${TMP_ROOT}/bad-budget-loop"
+mkdir -p "$bad_budget"
+cp "${ROOT_DIR}/loops/_template/prompt.md" "${bad_budget}/prompt.md"
+cp "${ROOT_DIR}/loops/_template/report-template.md" "${bad_budget}/report-template.md"
+cat >"${bad_budget}/loop.yaml" <<'EOF'
+name: bad-budget
+description: invalid max_runs_per_day
+agent: opencode
+max_iterations: 1
+min_iterations: 1
+completion_promise: X
+require_issue: false
+prompt_file: prompt.md
+report_template: report-template.md
+max_runs_per_day: two
+EOF
+assert_fail "validate rejects non-integer max_runs_per_day" validate_loop_dir "$bad_budget"
+
+budget_target="${TMP_ROOT}/budget-run-target"
+mkdir -p "${budget_target}/.opencode" "${budget_target}/.loop-engineering"
+printf '{}\n' >"${budget_target}/.opencode/opencode.json"
+cp "$budget_log" "${budget_target}/.loop-engineering/loop-run-log.md"
+budget_yaml="${TMP_ROOT}/budget-run.yaml"
+cat >"$budget_yaml" <<EOF
+target_path: ${budget_target}
+target_name: budget-run
+repo_provider: github
+repo_url: https://github.com/example/budget-run
+default_branch: main
+issue_post_mode: create
+mcp_permission: ask
+EOF
+budget_bin="${TMP_ROOT}/budget-bin"
+mkdir -p "$budget_bin"
+cat >"${budget_bin}/bun" <<'EOF'
+#!/usr/bin/env bash
+echo "ralph budget-stub"
+exit 0
+EOF
+chmod +x "${budget_bin}/bun"
+
+set +e
+PATH="${budget_bin}:${PATH}" \
+  "${ROOT_DIR}/engine/run-loop.sh" \
+    --loop monkey-test \
+    --target-config "$budget_yaml" \
+    --skip-issue-gate \
+    --skip-worktree-gate \
+  >"${TMP_ROOT}/budget-block.out" 2>"${TMP_ROOT}/budget-block.err"
+budget_block_rc=$?
+set -e
+if [[ "$budget_block_rc" -ne 0 ]] \
+  && grep -q '日次実行予算' "${TMP_ROOT}/budget-block.err"; then
+  log_ok "run-loop rejects 3rd production run same UTC day"
+  pass=$((pass + 1))
+else
+  log_error "run-loop daily budget not enforced (rc=${budget_block_rc})"
+  sed -n '1,60p' "${TMP_ROOT}/budget-block.err" >&2 || true
+  fail=$((fail + 1))
+fi
+after_block="$(count_loop_runs_today "${budget_target}/.loop-engineering/loop-run-log.md" "monkey-test")"
+assert_eq "budget reject does not append run-log" "$after_block" "2"
+
+set +e
+"${ROOT_DIR}/engine/run-loop.sh" \
+  --loop monkey-test \
+  --target-config "$budget_yaml" \
+  --dry-run \
+  >"${TMP_ROOT}/budget-dry.out" 2>"${TMP_ROOT}/budget-dry.err"
+budget_dry_rc=$?
+set -e
+if [[ "$budget_dry_rc" -eq 0 ]]; then
+  log_ok "dry-run is not blocked by daily budget"
+  pass=$((pass + 1))
+else
+  log_error "dry-run hit daily budget (rc=${budget_dry_rc})"
+  sed -n '1,40p' "${TMP_ROOT}/budget-dry.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+set +e
+PATH="${budget_bin}:${PATH}" \
+  "${ROOT_DIR}/engine/run-loop.sh" \
+    --loop monkey-test \
+    --target-config "$budget_yaml" \
+    --skip-issue-gate \
+    --skip-worktree-gate \
+    --skip-budget-gate \
+  >"${TMP_ROOT}/budget-skip.out" 2>"${TMP_ROOT}/budget-skip.err"
+budget_skip_rc=$?
+set -e
+if [[ "$budget_skip_rc" -eq 0 ]]; then
+  log_ok "--skip-budget-gate bypasses daily cap"
+  pass=$((pass + 1))
+else
+  log_error "--skip-budget-gate still failed (rc=${budget_skip_rc})"
+  sed -n '1,40p' "${TMP_ROOT}/budget-skip.err" >&2 || true
   fail=$((fail + 1))
 fi
 

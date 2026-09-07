@@ -11,7 +11,7 @@
 doctor が見るもの（概略）:
 
 - bun / opencode / node / ffmpeg / python3 / git 等のコマンド
-- submodule（ralph / ecc）の存在
+- submodule（ralph / ecc は必須。cobusgreyling-loop-engineering は参考・未初期化は WARN）
 - 同梱ループ一覧（`loops/*/loop.yaml`、`_template` 除外 — sync `--all-loops` と同契約）
 - LM Studio 疎通（任意・WARN）
 - Target readiness（`target.yaml` / init / mcp permission / lmstudio provider）

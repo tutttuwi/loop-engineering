@@ -32,7 +32,8 @@
 loop-engineering/
 ├── vendor/                          # git submodule（直接編集しない）
 │   ├── open-ralph-wiggum/           # Ralph ループランナー
-│   └── ecc/                         # ECC 本体（agents/skills/rules の供給元）
+│   ├── ecc/                         # ECC 本体（agents/skills/rules の供給元）
+│   └── cobusgreyling-loop-engineering/  # パターン参考（L1–L3 / STATE / safety）
 ├── engine/                          # 共通実行枠（触らない）
 │   ├── run-loop.sh                  # ループ起動エントリ
 │   └── lib/                         # report.sh / video.sh / common.sh 等
@@ -156,7 +157,7 @@ git pull                                 # 任意
 | 更新したいもの | やること |
 | --- | --- |
 | `engine/` / `setup/` / `loops/` の修正 | `git pull` だけで次の `run-loop` から有効（対象へコピー不要） |
-| Ralph / ECC upstream | `bootstrap-submodules.sh`（または `update.sh`） |
+| Ralph / ECC / cobusgreyling 参考 | `bootstrap-submodules.sh`（または `update.sh`） |
 | 対象の agents/skills/rules / opencode.json | `sync-ecc-assets` → `init-target-project`（`update.sh` が実行） |
 | 対象の report/video スクリプト | `run-loop` のたびに自動同期（または init でも同期） |
 | 自分で編集した `project-config/rules` 等 | **マニフェスト外は sync で消えない**（`.ecc-sync-manifest` 管理） |
@@ -249,8 +250,10 @@ cp project-config/target.yaml.example project-config/target.yaml
 | [docs/SETUP.md](docs/SETUP.md) | セットアップ手順（もれなく・ダブりなく） |
 | [docs/PORTING.md](docs/PORTING.md) | 他プロジェクトへの移植手順 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | ディレクトリ構成とデータの流れ |
+| [LOOP.md](LOOP.md) | この基盤のループ運用（自律度・kill switch） |
 | [docs/LOOPS.md](docs/LOOPS.md) | 同梱ループの説明と新規追加方法 |
 | [docs/features/](docs/features/README.md) | **機能カタログ（要件定義・設計・ロードマップ）** |
+| [vendor/cobusgreyling-loop-engineering](https://github.com/cobusgreyling/loop-engineering) | パターン参考 submodule |
 
 ## 前提ツール
 

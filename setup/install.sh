@@ -3,7 +3,7 @@
 #
 # loop-engineering 基盤の初回セットアップをまとめて実行するエントリポイント。
 # 「もれなく・ダブりなく」のセットアップフロー:
-#   1. submoduleの初期化 (open-ralph-wiggum, ECC)
+#   1. submoduleの初期化 (open-ralph-wiggum, ECC, cobusgreyling-loop-engineering)
 #   2. 必須ツールの確認 (bun, opencode, ffmpeg, jq など)
 #   3. グローバルopencode設定は任意である旨を案内
 #   4. project-config/ の雛形ファイルを用意
