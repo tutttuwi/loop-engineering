@@ -332,6 +332,7 @@ export COMPLETION_PROMISE="$completion_promise"
 export REPORT_TEMPLATE_PATH="$report_template_dst"
 
 export MONKEY_TEST_TARGET_URL="$(yaml_get "$target_yaml" "monkey_test_target_url" "")"
+export MONKEY_TEST_ACCOUNTS="$(yaml_get "$target_yaml" "monkey_test_accounts" "")"
 export PR_REVIEW_TARGET="$(yaml_get "$target_yaml" "pr_review_target" "")"
 
 # --- Issue投稿モード -------------------------------------------------------

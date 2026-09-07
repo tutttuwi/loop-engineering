@@ -69,6 +69,8 @@ project-config/.ecc-sync-manifest
 3. マニフェストに無いファイルはユーザー資産として保持
 4. 新規抽出分をコピーし、マニフェストを更新
 
+同梱のカスタムスキル（ECC に無いもの、例: `project-config/skills/persona-driven-qa`）は `ecc_skills` に載せない。init が `project-config/skills/` ごと対象へコピーし、再 sync でもマニフェスト外として残る。
+
 ### 案: ディレクトリ規約
 
 ```

@@ -33,6 +33,13 @@ default_branch: main
 # モンキーテストループで操作する対象URL(フロントエンド/モバイルアプリのプレビューURL等)
 monkey_test_target_url: http://localhost:3000
 
+# モンキーテストで使うテスト用アカウント（任意）。本番アカウントは書かない。
+# 形式: カンマ区切り。各エントリは role または role|login|secret
+# 値にカンマ・パイプ・# を含めないこと（フラットYAML制約）。
+# 空ならエージェントが docs / E2E fixtures / seed から探索する。
+# 例: guest,member|user@example.com|test-pass,admin|admin@example.com|test-pass
+monkey_test_accounts:
+
 # PR/MRレビューループで対象にするPR/MRの番号またはURL
 pr_review_target: https://github.com/your-org/your-repo/pull/123
 

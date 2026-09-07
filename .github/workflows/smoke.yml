@@ -12,6 +12,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - name: Init vendor submodules
+        run: git submodule update --init --recursive --depth 1
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

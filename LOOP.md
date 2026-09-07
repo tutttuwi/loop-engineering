@@ -11,7 +11,7 @@
 
 | ループ | レベル | 完了の検証 | 備考 |
 | --- | --- | --- | --- |
-| `monkey-test` | L1 | findings + Issue (`require_issue`) | Playwright で探索。アプリコードは触らない |
+| `monkey-test` | L1 | findings + Issue (`require_issue`) | ペルソナ探索。アプリコードは触らない |
 | `yabaiyo` | L1 | findings + Issue | 設計・実装の不備収集 |
 | `pr-review` | L1 | review-notes + Issue | レビュー投稿。マージしない |
 | `security-audit` | L1 | findings + Issue | 認証・秘密情報は報告のみ |

@@ -168,6 +168,7 @@ cp project-config/target.yaml.example project-config/target.yaml
 | `repo_provider` | `github` または `gitlab` |
 | `repo_url` | Issue 投稿先 |
 | `monkey_test_target_url` | モンキーテスト時のアプリURL |
+| `monkey_test_accounts` | 任意。テスト用アカウントDSL（`role` または `role|login|secret` のカンマ区切り） |
 | `pr_review_target` | PR/MR レビュー対象（番号またはURL） |
 | `issue_post_mode` | Issue投稿: `create`(毎回新規・既定) / `update`(既存へ追記) |
 | `issue_target` | `update` 時の既存Issue番号またはURL |
