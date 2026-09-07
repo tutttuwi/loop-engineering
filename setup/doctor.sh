@@ -190,6 +190,13 @@ else
   log_error "vendor/ecc が未初期化です。./setup/bootstrap-submodules.sh を実行してください"
   err_count=$((err_count + 1))
 fi
+if [[ -f "${ROOT_DIR}/vendor/cobusgreyling-loop-engineering/LOOP.md" ]]; then
+  log_ok "vendor/cobusgreyling-loop-engineering: 初期化済み（パターン参考）"
+  ok_count=$((ok_count + 1))
+else
+  log_warn "vendor/cobusgreyling-loop-engineering が未初期化です（実行には不要。参考用: ./setup/bootstrap-submodules.sh）"
+  warn_count=$((warn_count + 1))
+fi
 
 echo ""
 echo "--- 同梱ループ ---------------------------------------------------------"

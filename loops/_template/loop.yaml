@@ -21,6 +21,12 @@ min_iterations: 1
 # このタグが出力に含まれるとループを終了する
 completion_promise: TEMPLATE_COMPLETE
 
+# 自律度 (cobusgreyling loop-engineering: L0 文書 / L1 レポート / L2 支援修正 / L3 無人)
+# 省略時 L1。L3 は run-loop --allow-l3 または LOOP_ALLOW_L3=1 が必要
+autonomy_level: L1
+# 同一対象・同一ループの本番実行回数/UTC日（0=無制限。dry-run は除外）
+max_runs_per_day: 2
+
 # ホスト側 Issue 完了ゲート (true|false)。Issue不要なループは false
 require_issue: true
 # 実行開始時に OUTPUT_DIR 直下へ進捗スタブを作る(カンマ区切り・ファイル名のみ・既存は上書きしない)

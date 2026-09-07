@@ -105,8 +105,9 @@ P0–P4 で骨格は揃ったあとに残っていた、**コード／文書で�
 - ツール単位 MCP permission DSL（OpenCode 表現に依存・[permissions-unattended.md](./permissions-unattended.md) 非目標）
 - CI ジョブでの実 Chromium / 実 TTS / フル動画（環境差・時間。P5-1 は手元 opt-in のみ）
 - Windows ネイティブ対応スクリプト（README 前提は macOS/Linux 系ツール列。需要が出てから）
-- 需要のない新規製品ループ（`_template` / `new-loop.sh` で十分）
+- 需要のない新規製品ループ（`_template` / `new-loop.sh` で十分）。cobusgreyling の daily-triage 等は [cobusgreyling-reference.md](./cobusgreyling-reference.md) を見て需要ベースで追加
 - ステージ済み script への `LOOP_ENGINEERING_ROOT` 参照の全面再設計（[workspace-boundary.md](./workspace-boundary.md) の既知メモ。今の report/video は `SCRIPT_DIR` 相対で足りる）
+- cobusgreyling の `loop-audit` / `loop-gate` CLI の再実装（ホスト側は [loop-safety.md](./loop-safety.md) で最小強制）
 
 ### 追記（2026-09-06）: マルチエージェント
 

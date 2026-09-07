@@ -11,7 +11,7 @@
 | `target.yaml` | 対象プロジェクトのパス・Issue投稿先などの接続情報（既定） | `target.yaml.example` をコピーして編集 |
 | `targets/<name>.yaml` | 複数ターゲット用レジストリ（`--target-name`） | example を `targets/` へコピー。詳細は [targets/README.md](./targets/README.md) |
 | `agents/` | ループが使う subagent プロンプト（OpenCode `.txt` / Claude Code `.md`） | `../setup/sync-ecc-assets.sh` でECCから抽出、または自作 |
-| `skills/` | ループが参照するナレッジ/ワークフロー定義(SKILL.md) | 同上 |
+| `skills/` | ループが参照するナレッジ/ワークフロー定義(SKILL.md) | ECC sync、または自作（例: `persona-driven-qa` は monkey-test 用の同梱スキル） |
 | `rules/` | プロジェクトのコーディング規約・レビュー観点 | 同上 |
 
 `target.yaml` / `targets/*.yaml` と `agents/`, `skills/`, `rules/` の中身のうち、

@@ -442,6 +442,26 @@ validate_loop_dir() {
         ;;
     esac
   fi
+
+  # autonomy_level がある場合は L0–L3（省略時は run-loop が L1）
+  val="$(yaml_get "$loop_yaml" "autonomy_level" "")"
+  if [[ -n "$val" ]]; then
+    val="$(printf '%s' "$val" | tr '[:lower:]' '[:upper:]')"
+    case "$val" in
+      L0|L1|L2|L3) ;;
+      *)
+        log_error "autonomy_level は L0|L1|L2|L3 です: ${val}"
+        return 1
+        ;;
+    esac
+  fi
+
+  # max_runs_per_day がある場合は 0 以上の整数（0=無制限。省略時は run-loop が 2）
+  val="$(yaml_get "$loop_yaml" "max_runs_per_day" "")"
+  if [[ -n "$val" && ! "$val" =~ ^[0-9]+$ ]]; then
+    log_error "max_runs_per_day は 0 以上の整数です: ${val}"
+    return 1
+  fi
   return 0
 }
 
@@ -449,7 +469,8 @@ validate_loop_dir() {
 # 使い方: write_run_meta_json <path> <exit_code>  ※他フィールドは環境変数/引数から
 # 必須環境: LOOP_NAME, TARGET_PATH, RUN_ID, OUTPUT_DIR
 # 任意: RUN_META_STARTED_AT, RUN_META_DRY_RUN, RUN_META_REQUIRE_ISSUE,
-#       RUN_META_ISSUE_FALLBACK, RUN_META_RESUMED_FROM, RUN_META_AGENT
+#       RUN_META_ISSUE_FALLBACK, RUN_META_RESUMED_FROM, RUN_META_AGENT,
+#       RUN_META_AUTONOMY_LEVEL
 write_run_meta_json() {
   local path="$1"
   local exit_code="${2:-}"
@@ -472,9 +493,10 @@ write_run_meta_json() {
     "${RUN_META_ISSUE_FALLBACK:-}" \
     "${OUTPUT_DIR:-}" \
     "${RUN_META_RESUMED_FROM:-}" \
-    "${RUN_META_AGENT:-}" <<'PY'
+    "${RUN_META_AGENT:-}" \
+    "${RUN_META_AUTONOMY_LEVEL:-}" <<'PY'
 import json, sys
-path, loop, target, run_id, started, finished, exit_code, dry_run, require_issue, issue_fallback, output_dir, resumed_from, agent = sys.argv[1:14]
+path, loop, target, run_id, started, finished, exit_code, dry_run, require_issue, issue_fallback, output_dir, resumed_from, agent, autonomy = sys.argv[1:15]
 meta = {
     "loop": loop,
     "target_path": target,
@@ -490,6 +512,8 @@ if agent:
     meta["agent"] = agent
 if resumed_from:
     meta["resumed_from"] = resumed_from
+if autonomy:
+    meta["autonomy_level"] = autonomy
 if exit_code != "":
     try:
         meta["exit_code"] = int(exit_code)
@@ -639,13 +663,80 @@ STUB
       cat >"$path" <<'STUB'
 # state.md
 
-ホストが run-loop 開始時に用意したシードです。解析済み画面・実施済み操作を記録してください。
+ホストが run-loop 開始時に用意したシードです。フェーズ進捗・現在のペルソナ・解析済み画面・実施済み操作を記録してください。
+
+## フェーズ進捗
+
+- [ ] A. アプリケーションモデル（ユーザー種別・アクセス権・構造）
+- [ ] B. ユースケース / 業務フロー / 利用パターンの抽出
+- [ ] C. 多様なペルソナでのシナリオ実行
+- [ ] D. 報告（report / narration / Issue）
+
+## 現在のセッション
+
+- ペルソナ:
+- ロール:
+- 対象フロー:
 
 ## 画面一覧
 
 ## 実施済み操作
 
 ## メモ
+
+STUB
+      ;;
+    app-model.md)
+      cat >"$path" <<'STUB'
+# app-model.md
+
+ホストが run-loop 開始時に用意したシードです。対象アプリのユーザー種別・アクセス権・情報構造を記録してください。パスワードは書かないでください。
+
+## アプリケーション概要
+
+## 情報構造・画面/ルート
+
+| 画面/ルート | 目的 | 想定ロール | 主要操作 | 根拠 |
+| --- | --- | --- | --- | --- |
+
+## ユーザー種別・ロール
+
+| ロール | 説明 | 認証 | 主な権限 | テスト用識別子（パスワードは書かない） | 根拠 |
+| --- | --- | --- | --- | --- | --- |
+
+## アクセス制御マトリクス
+
+| リソース | 未認証 | （ロールを列に追加） |
+| --- | --- | --- |
+
+## 認証・セッション
+
+## 根拠（ドキュメント / ソース）
+
+STUB
+      ;;
+    scenarios.md)
+      cat >"$path" <<'STUB'
+# scenarios.md
+
+ホストが run-loop 開始時に用意したシードです。ユースケース・業務フロー・利用パターンと、ペルソナ×シナリオのカバレッジを記録してください。
+
+## ユースケース / 業務フロー
+
+| ID | フロー | アクター | 事前条件 | 主経路 | 代替/例外 | 根拠 |
+| --- | --- | --- | --- | --- | --- | --- |
+
+## 利用パターン
+
+## ペルソナ
+
+| ID | 名前 | ロール | 行動特性 | 使うアカウント（パスワードは書かない） | 観点 |
+| --- | --- | --- | --- | --- | --- |
+
+## テストカタログ（カバレッジ）
+
+| ID | ペルソナ | フロー | バリアント | 状態 | 結果 |
+| --- | --- | --- | --- | --- | --- |
 
 STUB
       ;;

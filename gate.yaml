@@ -1,0 +1,26 @@
+# cobusgreyling/loop-engineering の gate.yaml に合わせた機械可読ポリシー。
+# プロンプト挿入は engine/lib/gate.sh。ホストは自動マージしない。
+version: 1
+
+denylist:
+  - "**/.env"
+  - "**/.env.*"
+  - "**/secrets/**"
+  - "**/credentials/**"
+  - "**/*_key*"
+  - "**/*_secret*"
+  - "**/.terraform/**"
+  - "**/k8s/production/**"
+  - "**/migrations/**"
+  - "**/auth/**"
+  - "**/payments/**"
+  - "**/billing/**"
+  - "vendor/**"
+
+maxFiles: 10
+
+# 参考用。この基盤のホストは auto-merge しない。
+autoMergeAllowlist:
+  - "docs/**"
+  - "**/*.md"
+  - "tests/**"

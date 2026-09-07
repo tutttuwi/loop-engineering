@@ -3,7 +3,7 @@
 | 項目 | 値 |
 | --- | --- |
 | ステータス | `done`（P0-4 `--status` + P5-6 `run-meta.json` / 終了コード契約 + 前回 RUN 引き継ぎ） |
-| 関連実装 | `engine/run-loop.sh`, `engine/lib/render-prompt.sh`, `engine/lib/common.sh` (`write_run_meta_json` / `validate_loop_dir` / `resolve_resume_run_dir` / `inherit_run_artifacts`), `vendor/open-ralph-wiggum` |
+| 関連実装 | `engine/run-loop.sh`, `engine/lib/render-prompt.sh`, `engine/lib/common.sh` (`write_run_meta_json` / `validate_loop_dir` / `resolve_resume_run_dir` / `inherit_run_artifacts`), `engine/lib/gate.sh`, `vendor/open-ralph-wiggum` |
 | ロードマップ | P0-4, P5-5, P5-6 |
 
 ## 現状
@@ -14,15 +14,19 @@
 - `target.yaml` / `--target` / `--target-config` / `--target-name` で対象解決
 - プロンプト `{{VAR}}` 展開 → OUTPUT_DIR に保存
 - Ralph（`--agent` は OpenCode / Claude Code / Cursor Agent 等）で反復、`--completion-promise` で完了検知
-- `--dry-run`, `--max-iterations`, `--min-iterations`, `--model`, `--agent`, `--extra`
+- `--dry-run`, `--max-iterations`, `--min-iterations`, `--model`, `--agent`, `--extra`, `--allow-l3`
 - `--status` で対象プロジェクト上の Ralph 状態表示（`--loop` 不要）
 - `--list-targets` でレジストリ一覧
 - `--resume` / `--resume-from <RUN_ID>` で前回 RUN の進捗を新 RUN に引き継ぐ
 - Issue モード `--issue-post-mode` / `--issue-target` / `--issue-fallback` / `--skip-issue-gate`
 - `--post-report` / `--post-report-always`（[report-video-pipeline.md](./report-video-pipeline.md)）
 - `loop.yaml` の `seed_files` で進捗スタブを OUTPUT_DIR に用意（[bundled-loops.md](./bundled-loops.md)）
-- `OUTPUT_DIR/run-meta.json`（loop / started_at / exit_code / resumed_from 等）
+- `loop.yaml` の `autonomy_level`（既定 L1）と kill switch（[loop-safety.md](./loop-safety.md)）
+- `OUTPUT_DIR/run-meta.json`（loop / started_at / exit_code / resumed_from / agent / autonomy_level 等）
 - 実行前に `validate_loop_dir`（必須キー・参照ファイル）
+- プロンプト先頭へ Loop Guardrails を挿入。対象の `.loop-engineering/loop-run-log.md` に追記
+- Ralph 後の worktree ゲート（L1 ソース改変 / denylist。`--skip-worktree-gate`）
+- 日次 `max_runs_per_day` 予算（`--skip-budget-gate`）
 
 ### 完了判定
 

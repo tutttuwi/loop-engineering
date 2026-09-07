@@ -45,14 +45,14 @@ OpenCode（ローカルLLM）または Claude Code / Cursor Agent CLI を Ralph 
 3. `prompt.md` の `{{VAR}}` を展開し、同ディレクトリの `prompt.md` に保存（`report-template.md` もコピー）
 4. 対象プロジェクトを cwd にして `bun vendor/open-ralph-wiggum/ralph.ts --agent <resolved>` を起動
 5. Ralph が同じプロンプトを OpenCode に繰り返し渡し、`<promise>...</promise>` を待つ
-6. エージェントはファイル（`state.md` / `findings.md` 等）に進捗を残すため、次イテレーションで自己修正できる
+6. エージェントはファイル（`state.md` / `app-model.md` / `scenarios.md` / `findings.md` 等）に進捗を残すため、次イテレーションで自己修正できる
 7. 十分集まったら Marp → スライド/PDF、ffmpeg → 動画、MCP → Issue
 
 ## ディレクトリ責務
 
 | ディレクトリ | 責務 | 変更頻度 |
 | --- | --- | --- |
-| `vendor/` | upstream（Ralph / ECC） | submodule update 時のみ |
+| `vendor/` | upstream（Ralph / ECC / cobusgreyling パターン参考） | submodule update 時のみ |
 | `engine/` | 実行・レポート・動画の共通枠 | 基盤改善時 |
 | `engine/opencode/` | **未使用の参考テンプレ**（実生成は `setup/lib/build_target_opencode_config.py`） | 参照のみ |
 | `loops/` | ループアイデア（引数で切替） | アイデア追加時 |
@@ -126,4 +126,4 @@ TTS 切替: `LOOP_TTS_ENGINE=say|voicevox|openai|none`
 
 - `loop.yaml` / `target.yaml` は **フラットな key: value のみ**（bash3.2 でも動く簡易パーサ）
 - リストはカンマ区切り1行（`ecc_agents: a,b,c`）
-- `vendor/` は直接編集しない（カスタムは `project-config/` へ）
+- `vendor/` は直接編集しない（カスタムは `project-config/` へ）。パターン参考は `vendor/cobusgreyling-loop-engineering/`

@@ -10,7 +10,8 @@
    cp -R loops/_template loops/my-new-loop
    ```
 
-2. `loop.yaml` を編集する(名前、完了promise、イテレーション数、`seed_files`、ECCから取り込む資材)
+2. `loop.yaml` を編集する(名前、完了promise、`autonomy_level`、イテレーション数、`seed_files`、ECCから取り込む資材)
+   - `autonomy_level`: `L1`(レポート専用・既定) / `L2`(最小修正) / `L3`(無人・`--allow-l3` 必須)
    - `seed_files`: OUTPUT_DIR 直下にホストが初回スタブを作る進捗ファイル(カンマ区切り)。既存は上書きしない
 3. `prompt.md` を編集する(`{{VAR}}` プレースホルダーは `engine/run-loop.sh` が自動展開する)
 4. `report-template.md` を編集する(生成させたいスライド構成の指針)
@@ -39,5 +40,7 @@
 | `{{ISSUE_TARGET}}` | update時の既存Issue番号/URL |
 | `{{AGENT}}` | 実行エージェント (`opencode` / `claude-code` / `cursor-agent` 等) |
 | `{{RESUME_FROM_RUN_ID}}` | `--resume` 時の元 RUN_ID（未指定時は空。ホストがプロンプト先頭にもバナーを挿入する） |
+| `{{LOOP_AUTONOMY_LEVEL}}` | `L0`–`L3`（ホストが Loop Guardrails を prompt.md 先頭にも挿入する） |
 | `{{MONKEY_TEST_TARGET_URL}}` | モンキーテスト対象URL |
+| `{{MONKEY_TEST_ACCOUNTS}}` | モンキーテスト用アカウントDSL（`role` または `role|login|secret` のカンマ区切り。未設定時は空） |
 | `{{PR_REVIEW_TARGET}}` | PR/MRレビュー対象 |

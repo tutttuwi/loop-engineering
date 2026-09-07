@@ -18,11 +18,13 @@
 
 | 項目 | 内容 |
 | --- | --- |
-| 目的 | 画面構成把握後、Playwright で例外操作を繰り返し逸脱を検出 |
+| 目的 | ユーザー種別・アクセス権・構造とユースケースを解析し、多様なペルソナで業務フローと例外操作を検証 |
 | 完了 promise | `MONKEY_TEST_COMPLETE` |
-| 既定イテレーション | min 3 / max 25 |
-| 主な入力 | `monkey_test_target_url` |
+| 既定イテレーション | min 5 / max 25 |
+| 主な入力 | `monkey_test_target_url` / 任意 `monkey_test_accounts` |
+| 進捗ファイル | `state.md`, `app-model.md`, `scenarios.md`, `findings.md` |
 | ECC資材 | e2e-runner, architect / e2e-testing, frontend-patterns, browser-qa / common, web |
+| 補足スキル | `project-config/skills/persona-driven-qa`（ECC由来ではない。init で対象へコピー） |
 
 詳細: [`loops/monkey-test/README.md`](../loops/monkey-test/README.md)
 
@@ -129,9 +131,11 @@ cp -R loops/_template loops/my-new-loop
 
 ### 各ファイルの役割
 
+同梱ループの既定自律度は **L1（レポート専用）** です。対象アプリのソースは変更しません。運用の正は [LOOP.md](../LOOP.md)、安全装置は [features/loop-safety.md](./features/loop-safety.md)。
+
 | ファイル | 役割 |
 | --- | --- |
-| `loop.yaml` | 名前・イテレーション・完了promise・`seed_files`・ECC取り込み一覧 |
+| `loop.yaml` | 名前・イテレーション・完了promise・`autonomy_level`・`seed_files`・ECC取り込み一覧 |
 | `prompt.md` | 毎イテレーション同じプロンプト（`{{VAR}}` 展開あり） |
 | `report-template.md` | スライド構成の指針 |
 | `README.md` | 人間向けの使い方 |
@@ -156,7 +160,7 @@ cp -R loops/_template loops/my-new-loop
 <target>/.loop-engineering/output/<loop>/<RUN_ID>/
 ├── prompt.md          # 展開済みプロンプト
 ├── report-template.md # 実行開始時にコピーされたひな形
-├── state.md / plan.md / review-notes.md  # 進捗
+├── state.md / plan.md / review-notes.md / app-model.md / scenarios.md  # 進捗
 ├── findings.md        # 発見物
 ├── report.md          # Marp スライド原稿
 ├── narration.txt      # ナレーション（---`区切り）

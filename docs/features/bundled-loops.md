@@ -13,6 +13,7 @@
 3. 完了時に `<promise>{{COMPLETION_PROMISE}}</promise>` を出力するよう指示すること
 4. Issue 投稿手順は `{{ISSUE_POST_INSTRUCTIONS}}` に従うこと
 5. 新規ループは `_template` / `new-loop.sh` で追加できること
+6. 既定 `autonomy_level` は `L1`（対象ソースを変更しない。 [loop-safety.md](./loop-safety.md)）
 
 ## ループ別契約
 
@@ -20,11 +21,15 @@
 
 | 項目 | 内容 |
 | --- | --- |
-| 目的 | Playwright で探索的例外操作、仕様/設計逸脱の検出 |
-| 入力 | `monkey_test_target_url` |
-| 進捗ファイル | `state.md`, `findings.md`, `screenshots/` |
+| 目的 | ユーザー種別・アクセス権・ユースケースを解析し、多様なペルソナで業務フローと例外操作を検証 |
+| 入力 | `monkey_test_target_url`、任意 `monkey_test_accounts` |
+| 進捗ファイル | `state.md`, `app-model.md`, `scenarios.md`, `findings.md`, `screenshots/` |
 | 成果 | report.md / narration / pdf / mp4 / Issue |
 | 依存 MCP | playwright, github/gitlab |
+
+分析なきランダム操作はしない。フェーズは A モデル（ロール・権限・IA）→ B ユースケース／カタログ → C ペルソナ実行 → D 報告。
+`monkey_test_accounts` はフラットYAML向け DSL（`guest,member|user@example.com|test-pass`）。空なら docs / E2E / seed からテスト用アカウントを探索する。
+補足スキル `persona-driven-qa` は ECC 由来ではない（`project-config/skills/` に同梱。init で対象へコピー）。
 
 ### yabaiyo
 
@@ -81,10 +86,10 @@
 | 配置 | `<target>/.loop-engineering/output/<loop>/<RUN_ID>/` 直下のみ |
 | 名前 | 単純ファイル名（英数字・`._-`）。パス区切り / `..` / 絶対パスは拒否 |
 | 既存 | 既にあるファイルは上書きしない（再開・手動編集を保護） |
-| スタブ | `findings.md` / `plan.md` / `state.md` / `review-notes.md` は見出し付き。その他は汎用ヘッダ |
+| `findings.md` / `plan.md` / `state.md` / `review-notes.md` / `app-model.md` / `scenarios.md` は見出し付き。その他は汎用ヘッダ |
 | 実装 | `ensure_seed_files`（`engine/lib/common.sh`）← `engine/run-loop.sh` |
 
-同梱ループの設定例: monkey-test=`state.md,findings.md`、yabaiyo/security-audit/deps-audit=`plan.md,findings.md`、pr-review=`review-notes.md`。
+同梱ループの設定例: monkey-test=`state.md,app-model.md,scenarios.md,findings.md`、yabaiyo/security-audit/deps-audit=`plan.md,findings.md`、pr-review=`review-notes.md`。
 
 ## loop.yaml 検証（P5-5）
 
@@ -101,3 +106,4 @@
 - [x] 依存関係監査専用ループ（`deps-audit`）を製品化
 - [x] シードファイルで初回 Read 失敗を抑制（`seed_files` + `ensure_seed_files` + smoke）
 - [x] `validate_loop_dir` + `new-loop.sh`→dry-run を smoke 固定（P5-5）
+- [x] monkey-test が分析（ロール・権限・ユースケース）→多様なペルソナ実行の順で進む（`app-model.md` / `scenarios.md` / `monkey_test_accounts`）

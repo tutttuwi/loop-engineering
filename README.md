@@ -8,7 +8,7 @@
 
 | ループ | 概要 | 成果物 |
 | --- | --- | --- |
-| `monkey-test` | Playwright で例外操作を繰り返し、仕様/設計の逸脱を検出 | findings / スライド / 動画 / Issue |
+| `monkey-test` | ユーザー種別・権限・業務フローを解析し、多様なペルソナで探索的テスト | findings / スライド / 動画 / Issue |
 | `yabaiyo` | 計画→コード精査で設計・実装の「ヤバい」箇所を収集 | findings / スライド / 動画 / Issue |
 | `pr-review` | 特定の MR/PR を読み解き、インライン＋総括レビューを投稿 | review-notes / コメント / Issue |
 | `security-audit` | セキュリティ監査（OWASP・秘密情報・認証認可・依存関係） | findings / スライド / 動画 / Issue |
@@ -32,7 +32,8 @@
 loop-engineering/
 ├── vendor/                          # git submodule（直接編集しない）
 │   ├── open-ralph-wiggum/           # Ralph ループランナー
-│   └── ecc/                         # ECC 本体（agents/skills/rules の供給元）
+│   ├── ecc/                         # ECC 本体（agents/skills/rules の供給元）
+│   └── cobusgreyling-loop-engineering/  # パターン参考（L1–L3 / STATE / safety）
 ├── engine/                          # 共通実行枠（触らない）
 │   ├── run-loop.sh                  # ループ起動エントリ
 │   └── lib/                         # report.sh / video.sh / common.sh 等
@@ -161,7 +162,7 @@ git pull                                 # 任意
 | 更新したいもの | やること |
 | --- | --- |
 | `engine/` / `setup/` / `loops/` の修正 | `git pull` だけで次の `run-loop` から有効（対象へコピー不要） |
-| Ralph / ECC upstream | `bootstrap-submodules.sh`（または `update.sh`） |
+| Ralph / ECC / cobusgreyling 参考 | `bootstrap-submodules.sh`（または `update.sh`） |
 | 対象の agents/skills/rules / opencode.json | `sync-ecc-assets` → `init-target-project`（`update.sh` が実行） |
 | 対象の report/video スクリプト | `run-loop` のたびに自動同期（または init でも同期） |
 | 自分で編集した `project-config/rules` 等 | **マニフェスト外は sync で消えない**（`.ecc-sync-manifest` 管理） |
@@ -191,7 +192,7 @@ git pull                                 # 任意
 
 # 3. 対象プロジェクトを指定
 cp project-config/target.yaml.example project-config/target.yaml
-# → target_path / repo_url / monkey_test_target_url などを編集
+# → target_path / repo_url / monkey_test_target_url / monkey_test_accounts などを編集
 
 # 4. ECC資材の取り込み + 対象プロジェクトへ接続
 #    OpenCode なら <target>/.opencode/opencode.json に LM Studio / MCP が入る
@@ -260,9 +261,11 @@ Claude Code / Cursor Agent で回す場合は LM Studio もグローバル OpenC
 | [docs/SETUP.md](docs/SETUP.md) | セットアップ手順（もれなく・ダブりなく） |
 | [docs/PORTING.md](docs/PORTING.md) | 他プロジェクトへの移植手順 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | ディレクトリ構成とデータの流れ |
+| [LOOP.md](LOOP.md) | この基盤のループ運用（自律度・kill switch） |
 | [docs/LOOPS.md](docs/LOOPS.md) | 同梱ループの説明と新規追加方法 |
 | [docs/features/](docs/features/README.md) | **機能カタログ（要件定義・設計・ロードマップ）** |
 | [docs/features/multi-agent.md](docs/features/multi-agent.md) | OpenCode / Claude Code / Cursor Agent の切替 |
+| [vendor/cobusgreyling-loop-engineering](https://github.com/cobusgreyling/loop-engineering) | パターン参考 submodule |
 
 ## 前提ツール
 
