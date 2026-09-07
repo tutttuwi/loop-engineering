@@ -13,8 +13,8 @@
 - `--loop` で `loops/<name>/` を選択
 - `target.yaml` / `--target` / `--target-config` / `--target-name` で対象解決
 - プロンプト `{{VAR}}` 展開 → OUTPUT_DIR に保存
-- Ralph（`--agent opencode`）で反復、`--completion-promise` で完了検知
-- `--dry-run`, `--max-iterations`, `--min-iterations`, `--model`, `--extra`, `--allow-l3`
+- Ralph（`--agent` は OpenCode / Claude Code / Cursor Agent 等）で反復、`--completion-promise` で完了検知
+- `--dry-run`, `--max-iterations`, `--min-iterations`, `--model`, `--agent`, `--extra`, `--allow-l3`
 - `--status` で対象プロジェクト上の Ralph 状態表示（`--loop` 不要）
 - `--list-targets` でレジストリ一覧
 - `--resume` / `--resume-from <RUN_ID>` で前回 RUN の進捗を新 RUN に引き継ぐ
@@ -22,7 +22,7 @@
 - `--post-report` / `--post-report-always`（[report-video-pipeline.md](./report-video-pipeline.md)）
 - `loop.yaml` の `seed_files` で進捗スタブを OUTPUT_DIR に用意（[bundled-loops.md](./bundled-loops.md)）
 - `loop.yaml` の `autonomy_level`（既定 L1）と kill switch（[loop-safety.md](./loop-safety.md)）
-- `OUTPUT_DIR/run-meta.json`（loop / started_at / exit_code / resumed_from / autonomy_level 等）
+- `OUTPUT_DIR/run-meta.json`（loop / started_at / exit_code / resumed_from / agent / autonomy_level 等）
 - 実行前に `validate_loop_dir`（必須キー・参照ファイル）
 - プロンプト先頭へ Loop Guardrails を挿入。対象の `.loop-engineering/loop-run-log.md` に追記
 - Ralph 後の worktree ゲート（L1 ソース改変 / denylist。`--skip-worktree-gate`）

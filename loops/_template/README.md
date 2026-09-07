@@ -38,7 +38,7 @@
 | `{{REPORT_TEMPLATE_PATH}}` | 出力ディレクトリ内にコピーされた report-template.md の絶対パス |
 | `{{ISSUE_POST_MODE}}` | `create` または `update` |
 | `{{ISSUE_TARGET}}` | update時の既存Issue番号/URL |
-| `{{ISSUE_POST_INSTRUCTIONS}}` | Issue投稿の具体的な手順文(モード別に展開済み) |
+| `{{AGENT}}` | 実行エージェント (`opencode` / `claude-code` / `cursor-agent` 等) |
 | `{{RESUME_FROM_RUN_ID}}` | `--resume` 時の元 RUN_ID（未指定時は空。ホストがプロンプト先頭にもバナーを挿入する） |
 | `{{LOOP_AUTONOMY_LEVEL}}` | `L0`–`L3`（ホストが Loop Guardrails を prompt.md 先頭にも挿入する） |
 | `{{MONKEY_TEST_TARGET_URL}}` | モンキーテスト対象URL |

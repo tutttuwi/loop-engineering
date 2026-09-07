@@ -3,9 +3,10 @@
 #
 # ★他プロジェクトへこの基盤を「導入」する際に使うスクリプト（ループ実行に必須）。
 # project-config/{agents,skills,rules} の内容を対象プロジェクトの
-# .opencode/loop-engineering/ 配下にコピーし、LM Studio接続設定・
-# agent/skill/rules参照・MCP(github/gitlab/playwright/serena)・lsp:true を含む
-# .opencode/opencode.json を対象プロジェクトに生成する。
+# 選択したエージェント向け設定を対象プロジェクトへ書く。
+#   opencode     … LM Studio / MCP / lsp を含む .opencode/opencode.json
+#   claude-code  … .claude/{skills,agents,rules,CLAUDE.md} と .mcp.json
+#   cursor-agent … .cursor/{skills,rules,mcp.json}
 #
 # 対象パスの優先順位:
 #   1. --target 引数
@@ -15,8 +16,9 @@
 # target-config の優先順位:
 #   --target-config > --target-name(レジストリ) > LOOP_TARGET_CONFIG > project-config/target.yaml
 #
-# configure-opencode.sh（グローバル設定）は任意。ループは対象PJの
-# .opencode/opencode.json を使うため、本スクリプトまで完了していれば足りる。
+# configure-opencode.sh（グローバル設定）は任意。OpenCode ループは対象PJの
+# .opencode/opencode.json を使う。Claude Code / Cursor Agent は本スクリプトが
+# それぞれのネイティブレイアウトを書く。
 #
 # 使い方:
 #   # target.yaml の target_path を使う(推奨)
@@ -45,6 +47,8 @@ mcp_permission_overrides_cli=""
 target_config=""
 target_registry_name=""
 list_targets_only=0
+agent_cli=""
+init_agents_cli=""
 
 usage() {
   cat >&2 <<'EOF'
@@ -76,10 +80,16 @@ Options:
   --without-playwright        mcp.playwright を登録しない
   --without-serena            mcp.serena を登録しない
   --without-lsp               lsp: true を設定しない
+  --agent <name>              実行エージェント既定 (target.yaml の agent へも反映)
+                              opencode | claude-code | cursor-agent
+  --agents <csv>              init が書くレイアウト。例: opencode,claude-code
+                              all = 第一級3種。省略時は --agent / target.yaml
 
-既定では次をすべて登録します:
+既定(OpenCode)では次をすべて登録します:
   mcp.github / mcp.gitlab / mcp.playwright / mcp.serena / lsp:true
   permission.mcp_* = ask (無人実行時は --mcp-permission allow)
+
+Claude Code / Cursor Agent では同等の MCP を .mcp.json / .cursor/mcp.json へマージします。
 EOF
 }
 
@@ -109,6 +119,8 @@ while [[ $# -gt 0 ]]; do
     --without-playwright) enable_playwright=0; shift ;;
     --without-serena) enable_serena=0; shift ;;
     --without-lsp) enable_lsp=0; shift ;;
+    --agent) agent_cli="$2"; shift 2 ;;
+    --agents) init_agents_cli="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) log_error "不明な引数: $1"; usage; exit 1 ;;
   esac
@@ -155,13 +167,26 @@ log_info "対象プロジェクト: ${target} (${display_name})"
 log_info "target.yaml     : ${target_yaml}"
 log_info "repo_provider   : ${repo_provider}"
 
-require_cmd python3
-require_cmd curl
+run_agent="$(resolve_loop_agent "$agent_cli" "$target_yaml" "")" || exit 1
+init_agents="$(resolve_init_agents "$init_agents_cli" "$target_yaml" "$run_agent")" || exit 1
+log_info "agent           : ${run_agent}"
+log_info "init_agents     : ${init_agents}"
 
-if [[ -z "$model_id" ]]; then
-  models_json="/tmp/loop-eng-init-lmstudio-models.json"
-  if curl -fsS --max-time 3 "${base_url%/}/models" -o "$models_json" 2>/dev/null; then
-    model_id="$(python3 -c "
+require_cmd python3
+
+mcp_permission="$(resolve_mcp_permission "$mcp_permission_cli" "$target_yaml")" || exit 1
+mcp_permission_overrides="$(resolve_mcp_permission_overrides "$mcp_permission_overrides_cli" "$target_yaml")" || exit 1
+log_info "mcp_permission : ${mcp_permission}"
+if [[ -n "$mcp_permission_overrides" ]]; then
+  log_info "mcp_permission_overrides : ${mcp_permission_overrides}"
+fi
+
+if csv_has "$init_agents" "opencode"; then
+  require_cmd curl
+  if [[ -z "$model_id" ]]; then
+    models_json="/tmp/loop-eng-init-lmstudio-models.json"
+    if curl -fsS --max-time 3 "${base_url%/}/models" -o "$models_json" 2>/dev/null; then
+      model_id="$(python3 -c "
 import json
 try:
     with open('${models_json}') as f:
@@ -171,70 +196,95 @@ try:
 except Exception:
     print('')
 ")"
+    fi
+  fi
+  if [[ -z "$model_id" ]]; then
+    log_warn "LM StudioモデルIDを自動検出できませんでした。--lmstudio-model で指定してください(仮に 'local-model' を使用します)"
+    model_id="local-model"
+  fi
+  model_name="${model_name:-${model_id} (LM Studio local)}"
+
+  dest_root="${target}/.opencode/loop-engineering"
+  mkdir -p "${dest_root}/agents" "${dest_root}/skills" "${dest_root}/rules"
+
+  log_info "project-config/agents -> ${dest_root}/agents"
+  if [[ -d "${ROOT_DIR}/project-config/agents" ]]; then
+    cp -R "${ROOT_DIR}/project-config/agents/." "${dest_root}/agents/" 2>/dev/null || true
+  fi
+  log_info "project-config/skills -> ${dest_root}/skills"
+  if [[ -d "${ROOT_DIR}/project-config/skills" ]]; then
+    cp -R "${ROOT_DIR}/project-config/skills/." "${dest_root}/skills/" 2>/dev/null || true
+  fi
+  log_info "project-config/rules  -> ${dest_root}/rules"
+  if [[ -d "${ROOT_DIR}/project-config/rules" ]]; then
+    cp -R "${ROOT_DIR}/project-config/rules/." "${dest_root}/rules/" 2>/dev/null || true
+  fi
+
+  opencode_json="${target}/.opencode/opencode.json"
+  if [[ -f "$opencode_json" ]]; then
+    backup="${opencode_json}.bak.$(timestamp)"
+    cp "$opencode_json" "$backup"
+    log_warn "既存の opencode.json をバックアップしました: ${backup}"
+  fi
+
+  LOOP_TARGET_OPENCODE_JSON="$opencode_json" \
+  LOOP_BASE_URL="$base_url" \
+  LOOP_MODEL_ID="$model_id" \
+  LOOP_MODEL_NAME="$model_name" \
+  LOOP_DEST_ROOT="loop-engineering" \
+  LOOP_REPO_PROVIDER="$repo_provider" \
+  LOOP_ENABLE_GITHUB="$enable_github" \
+  LOOP_ENABLE_GITLAB="$enable_gitlab" \
+  LOOP_ENABLE_PLAYWRIGHT="$enable_playwright" \
+  LOOP_ENABLE_SERENA="$enable_serena" \
+  LOOP_ENABLE_LSP="$enable_lsp" \
+  LOOP_MCP_PERMISSION="$mcp_permission" \
+  LOOP_MCP_PERMISSION_OVERRIDES="$mcp_permission_overrides" \
+  python3 "${SCRIPT_DIR}/lib/build_target_opencode_config.py"
+
+  log_ok "opencode.json を生成/更新しました: ${opencode_json}"
+  log_info "登録内容: github=${enable_github} gitlab=${enable_gitlab} playwright=${enable_playwright} serena=${enable_serena} lsp=${enable_lsp} mcp_permission=${mcp_permission}"
+  if [[ -n "$mcp_permission_overrides" ]]; then
+    log_info "サーバ別 permission: ${mcp_permission_overrides}"
+  fi
+  if [[ "$mcp_permission" == "ask" ]]; then
+    log_info "無人ループでは --mcp-permission allow を推奨します"
+  fi
+  if [[ "$enable_serena" -eq 1 ]] && ! command -v uvx >/dev/null 2>&1; then
+    log_warn "uvx が見つかりません。Serena MCP 利用前に導入してください:"
+    log_warn "  curl -LsSf https://astral.sh/uv/install.sh | sh"
+  fi
+else
+  log_info "init_agents に opencode が無いため opencode.json / LM Studio 設定はスキップします"
+fi
+
+stage_agents=""
+if csv_has "$init_agents" "claude-code"; then
+  stage_agents="claude-code"
+fi
+if csv_has "$init_agents" "cursor-agent"; then
+  if [[ -n "$stage_agents" ]]; then
+    stage_agents="${stage_agents},cursor-agent"
+  else
+    stage_agents="cursor-agent"
   fi
 fi
-if [[ -z "$model_id" ]]; then
-  log_warn "LM StudioモデルIDを自動検出できませんでした。--lmstudio-model で指定してください(仮に 'local-model' を使用します)"
-  model_id="local-model"
-fi
-model_name="${model_name:-${model_id} (LM Studio local)}"
-
-dest_root="${target}/.opencode/loop-engineering"
-mkdir -p "${dest_root}/agents" "${dest_root}/skills" "${dest_root}/rules"
-
-log_info "project-config/agents -> ${dest_root}/agents"
-if [[ -d "${ROOT_DIR}/project-config/agents" ]]; then
-  cp -R "${ROOT_DIR}/project-config/agents/." "${dest_root}/agents/" 2>/dev/null || true
-fi
-log_info "project-config/skills -> ${dest_root}/skills"
-if [[ -d "${ROOT_DIR}/project-config/skills" ]]; then
-  cp -R "${ROOT_DIR}/project-config/skills/." "${dest_root}/skills/" 2>/dev/null || true
-fi
-log_info "project-config/rules  -> ${dest_root}/rules"
-if [[ -d "${ROOT_DIR}/project-config/rules" ]]; then
-  cp -R "${ROOT_DIR}/project-config/rules/." "${dest_root}/rules/" 2>/dev/null || true
-fi
-
-opencode_json="${target}/.opencode/opencode.json"
-if [[ -f "$opencode_json" ]]; then
-  backup="${opencode_json}.bak.$(timestamp)"
-  cp "$opencode_json" "$backup"
-  log_warn "既存の opencode.json をバックアップしました: ${backup}"
-fi
-
-mcp_permission="$(resolve_mcp_permission "$mcp_permission_cli" "$target_yaml")" || exit 1
-mcp_permission_overrides="$(resolve_mcp_permission_overrides "$mcp_permission_overrides_cli" "$target_yaml")" || exit 1
-log_info "mcp_permission : ${mcp_permission}"
-if [[ -n "$mcp_permission_overrides" ]]; then
-  log_info "mcp_permission_overrides : ${mcp_permission_overrides}"
-fi
-
-LOOP_TARGET_OPENCODE_JSON="$opencode_json" \
-LOOP_BASE_URL="$base_url" \
-LOOP_MODEL_ID="$model_id" \
-LOOP_MODEL_NAME="$model_name" \
-LOOP_DEST_ROOT="loop-engineering" \
-LOOP_REPO_PROVIDER="$repo_provider" \
-LOOP_ENABLE_GITHUB="$enable_github" \
-LOOP_ENABLE_GITLAB="$enable_gitlab" \
-LOOP_ENABLE_PLAYWRIGHT="$enable_playwright" \
-LOOP_ENABLE_SERENA="$enable_serena" \
-LOOP_ENABLE_LSP="$enable_lsp" \
-LOOP_MCP_PERMISSION="$mcp_permission" \
-LOOP_MCP_PERMISSION_OVERRIDES="$mcp_permission_overrides" \
-python3 "${SCRIPT_DIR}/lib/build_target_opencode_config.py"
-
-log_ok "opencode.json を生成/更新しました: ${opencode_json}"
-log_info "登録内容: github=${enable_github} gitlab=${enable_gitlab} playwright=${enable_playwright} serena=${enable_serena} lsp=${enable_lsp} mcp_permission=${mcp_permission}"
-if [[ -n "$mcp_permission_overrides" ]]; then
-  log_info "サーバ別 permission: ${mcp_permission_overrides}"
-fi
-if [[ "$mcp_permission" == "ask" ]]; then
-  log_info "無人ループでは --mcp-permission allow を推奨します"
-fi
-if [[ "$enable_serena" -eq 1 ]] && ! command -v uvx >/dev/null 2>&1; then
-  log_warn "uvx が見つかりません。Serena MCP 利用前に導入してください:"
-  log_warn "  curl -LsSf https://astral.sh/uv/install.sh | sh"
+if [[ -n "$stage_agents" ]]; then
+  LOOP_TARGET="$target" \
+  LOOP_PROJECT_CONFIG="${ROOT_DIR}/project-config" \
+  LOOP_INIT_AGENTS="$stage_agents" \
+  LOOP_ENABLE_GITHUB="$enable_github" \
+  LOOP_ENABLE_GITLAB="$enable_gitlab" \
+  LOOP_ENABLE_PLAYWRIGHT="$enable_playwright" \
+  LOOP_ENABLE_SERENA="$enable_serena" \
+  LOOP_MCP_PERMISSION="$mcp_permission" \
+  python3 "${SCRIPT_DIR}/lib/stage_agent_assets.py"
+  if csv_has "$init_agents" "claude-code"; then
+    log_ok "Claude Code 資材: ${target}/.claude/"
+  fi
+  if csv_has "$init_agents" "cursor-agent"; then
+    log_ok "Cursor Agent 資材: ${target}/.cursor/"
+  fi
 fi
 
 # 成果物ディレクトリを対象PJの git 管理外にする
@@ -251,10 +301,10 @@ if [[ "$write_target_yaml" -eq 1 ]]; then
     log_info "target.yaml を新規作成しました: ${target_yaml}"
   fi
 
-  python3 - "$target_yaml" "$target" "$display_name" "$repo_provider" <<'PYEOF'
+  python3 - "$target_yaml" "$target" "$display_name" "$repo_provider" "$run_agent" <<'PYEOF'
 import sys
 
-target_yaml, target_path, target_name, repo_provider = sys.argv[1:5]
+target_yaml, target_path, target_name, repo_provider, agent = sys.argv[1:6]
 
 with open(target_yaml, "r", encoding="utf-8") as f:
     lines = f.readlines()
@@ -263,6 +313,7 @@ updates = {
     "target_path": target_path,
     "target_name": target_name,
     "repo_provider": repo_provider,
+    "agent": agent,
 }
 
 seen = set()
@@ -293,4 +344,13 @@ else
 fi
 
 log_ok "対象プロジェクトの初期化が完了しました: ${target}"
-log_info "確認: cd ${target} && opencode  (/model で 'LM Studio (local)' が使えるか確認してください)"
+log_info "実行エージェント: ${run_agent}  /  init レイアウト: ${init_agents}"
+if csv_has "$init_agents" "opencode"; then
+  log_info "確認(OpenCode): cd ${target} && opencode  (/model で 'LM Studio (local)' が使えるか)"
+fi
+if csv_has "$init_agents" "claude-code"; then
+  log_info "確認(Claude Code): cd ${target} && claude  (CLAUDE.md / .claude/skills を読むこと)"
+fi
+if csv_has "$init_agents" "cursor-agent"; then
+  log_info "確認(Cursor Agent): cd ${target} && (cursor-agent または agent)  (.cursor/rules を読むこと)"
+fi

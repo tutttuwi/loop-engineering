@@ -53,6 +53,220 @@ require_cmd() {
   return 0
 }
 
+# --- Ralph エージェント解決 -----------------------------------------------
+# 第一級: opencode / claude-code / cursor-agent
+# Ralph 通過: codex / copilot / qwen-code（init レイアウトは無し）
+LOOP_PRIMARY_AGENTS="opencode claude-code cursor-agent"
+LOOP_RALPH_AGENTS="opencode claude-code cursor-agent codex copilot qwen-code"
+
+# エイリアスを Ralph --agent 値へ正規化する。
+# 使い方: normalize_agent_name <raw>
+normalize_agent_name() {
+  local raw="${1:-}"
+  raw="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]' | tr '_' '-')"
+  case "$raw" in
+    ""|opencode|local|lmstudio|local-llm) printf '%s' "opencode" ;;
+    claude|claude-code|claudecode) printf '%s' "claude-code" ;;
+    cursor|cursor-agent|cursoragent|agent) printf '%s' "cursor-agent" ;;
+    codex) printf '%s' "codex" ;;
+    copilot) printf '%s' "copilot" ;;
+    qwen|qwen-code|qwencode) printf '%s' "qwen-code" ;;
+    *) printf '%s' "$raw" ;;
+  esac
+}
+
+# 対応エージェントなら 0。未対応ならエラーを出して 1。
+validate_agent_name() {
+  local agent
+  agent="$(normalize_agent_name "$1")"
+  case "$agent" in
+    opencode|claude-code|cursor-agent|codex|copilot|qwen-code) return 0 ;;
+    *)
+      log_error "未対応の agent です: ${1:-"(空)"}"
+      log_error "  第一級: opencode | claude-code | cursor-agent"
+      log_error "  Ralph通過: codex | copilot | qwen-code"
+      return 1
+      ;;
+  esac
+}
+
+# 実行エージェントを解決する。優先順位: CLI > target.yaml agent > loop.yaml agent > opencode
+# 使い方: resolve_loop_agent <cli_override> <target_yaml> <loop_yaml>
+resolve_loop_agent() {
+  local cli="${1:-}"
+  local target_yaml="${2:-}"
+  local loop_yaml="${3:-}"
+  local raw=""
+  if [[ -n "$cli" ]]; then
+    raw="$cli"
+  elif [[ -n "$target_yaml" ]]; then
+    raw="$(yaml_get "$target_yaml" "agent" "")"
+  fi
+  if [[ -z "$raw" && -n "$loop_yaml" ]]; then
+    raw="$(yaml_get "$loop_yaml" "agent" "")"
+  fi
+  raw="$(normalize_agent_name "${raw:-opencode}")"
+  validate_agent_name "$raw" || return 1
+  printf '%s' "$raw"
+}
+
+# init が書き込むレイアウト一覧(カンマ区切り)。
+# 優先順位: CLI --agents > target.yaml init_agents > 実行エージェント
+# "all" は opencode,claude-code,cursor-agent
+# 使い方: resolve_init_agents <cli_csv> <target_yaml> <run_agent>
+resolve_init_agents() {
+  local cli="${1:-}"
+  local target_yaml="${2:-}"
+  local run_agent="${3:-opencode}"
+  local raw="$cli"
+  if [[ -z "$raw" && -n "$target_yaml" ]]; then
+    raw="$(yaml_get "$target_yaml" "init_agents" "")"
+  fi
+  if [[ -z "$raw" ]]; then
+    raw="$run_agent"
+  fi
+  raw="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]' | tr '_' '-' | tr -d ' ')"
+  if [[ "$raw" == "all" ]]; then
+    printf '%s' "opencode,claude-code,cursor-agent"
+    return 0
+  fi
+  local old_ifs="$IFS"
+  IFS=','
+  # shellcheck disable=SC2206
+  local items=($raw)
+  IFS="$old_ifs"
+  local item canon out="" seen=" "
+  for item in "${items[@]}"; do
+    [[ -z "$item" ]] && continue
+    canon="$(normalize_agent_name "$item")"
+    case "$canon" in
+      opencode|claude-code|cursor-agent) ;;
+      *)
+        log_error "init_agents に第一級エージェント以外は指定できません: ${item}"
+        log_error "  使える値: opencode, claude-code, cursor-agent, all"
+        return 1
+        ;;
+    esac
+    if [[ "$seen" == *" ${canon} "* ]]; then
+      continue
+    fi
+    seen="${seen}${canon} "
+    if [[ -z "$out" ]]; then
+      out="$canon"
+    else
+      out="${out},${canon}"
+    fi
+  done
+  if [[ -z "$out" ]]; then
+    log_error "init_agents が空です"
+    return 1
+  fi
+  printf '%s' "$out"
+}
+
+# csv に項目が含まれるか (完全一致)
+csv_has() {
+  local csv="$1" needle="$2"
+  local old_ifs="$IFS" item
+  IFS=','
+  # shellcheck disable=SC2206
+  local items=($csv)
+  IFS="$old_ifs"
+  for item in "${items[@]}"; do
+    [[ "$item" == "$needle" ]] && return 0
+  done
+  return 1
+}
+
+# エージェント CLI の探索候補(空白区切り)。先頭が Ralph 既定。
+agent_cli_candidates() {
+  local agent
+  agent="$(normalize_agent_name "$1")"
+  case "$agent" in
+    opencode) printf '%s' "${RALPH_OPENCODE_BINARY:-opencode}" ;;
+    claude-code) printf '%s' "${RALPH_CLAUDE_BINARY:-claude}" ;;
+    cursor-agent)
+      if [[ -n "${RALPH_CURSOR_AGENT_BINARY:-}" ]]; then
+        printf '%s' "$RALPH_CURSOR_AGENT_BINARY"
+      else
+        printf '%s' "cursor-agent agent"
+      fi
+      ;;
+    codex) printf '%s' "${RALPH_CODEX_BINARY:-codex}" ;;
+    copilot) printf '%s' "${RALPH_COPILOT_BINARY:-copilot}" ;;
+    qwen-code) printf '%s' "${RALPH_QWEN_CODE_BINARY:-qwen}" ;;
+    *) printf '%s' "$agent" ;;
+  esac
+}
+
+# PATH 上のエージェントバイナリ。見つからなければ空。
+# 使い方: resolve_agent_binary <agent>
+resolve_agent_binary() {
+  local agent="$1" cand
+  for cand in $(agent_cli_candidates "$agent"); do
+    if command -v "$cand" >/dev/null 2>&1; then
+      command -v "$cand"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# エージェント導入ヒント
+agent_install_hint() {
+  local agent
+  agent="$(normalize_agent_name "$1")"
+  case "$agent" in
+    opencode)
+      printf '%s' "npm install -g opencode  (または https://opencode.ai/install )"
+      ;;
+    claude-code)
+      printf '%s' "npm install -g @anthropic-ai/claude-code  (バイナリ名: claude)"
+      ;;
+    cursor-agent)
+      printf '%s' "curl https://cursor.com/install -fsS | bash  (バイナリ名: agent / cursor-agent)"
+      ;;
+    codex)
+      printf '%s' "npm install -g @openai/codex"
+      ;;
+    copilot)
+      printf '%s' "GitHub Copilot CLI を導入してください"
+      ;;
+    qwen-code)
+      printf '%s' "https://github.com/QwenLM/qwen-code を参照"
+      ;;
+    *)
+      printf '%s' "対応 CLI を PATH に入れてください"
+      ;;
+  esac
+}
+
+# 対象PJが当該エージェント向けに init 済みか。
+# 使い方: target_agent_initialized <target_path> <agent>
+target_agent_initialized() {
+  local target="$1" agent="$2"
+  agent="$(normalize_agent_name "$agent")"
+  case "$agent" in
+    opencode)
+      [[ -f "${target}/.opencode/opencode.json" ]]
+      ;;
+    claude-code)
+      [[ -f "${target}/.claude/CLAUDE.md" ]] \
+        || [[ -d "${target}/.claude/skills" ]] \
+        || [[ -f "${target}/.claude/loop-engineering.managed" ]]
+      ;;
+    cursor-agent)
+      [[ -f "${target}/.cursor/rules/loop-engineering.mdc" ]] \
+        || [[ -d "${target}/.cursor/skills" ]] \
+        || [[ -f "${target}/.cursor/loop-engineering.managed" ]]
+      ;;
+    *)
+      # 通過エージェントは専用レイアウト不要
+      return 0
+      ;;
+  esac
+}
+
 # --- 配列読み込み(bash3.2互換, mapfile/namerefを使わない) -----------------
 # nameref(local -n)はbash4.3+専用でmacOS標準bash(3.2)では使えないため、
 # 配列読み込みは各スクリプト側で以下のパターンを直接使うこと:
@@ -255,7 +469,8 @@ validate_loop_dir() {
 # 使い方: write_run_meta_json <path> <exit_code>  ※他フィールドは環境変数/引数から
 # 必須環境: LOOP_NAME, TARGET_PATH, RUN_ID, OUTPUT_DIR
 # 任意: RUN_META_STARTED_AT, RUN_META_DRY_RUN, RUN_META_REQUIRE_ISSUE,
-#       RUN_META_ISSUE_FALLBACK, RUN_META_RESUMED_FROM, RUN_META_AUTONOMY_LEVEL
+#       RUN_META_ISSUE_FALLBACK, RUN_META_RESUMED_FROM, RUN_META_AGENT,
+#       RUN_META_AUTONOMY_LEVEL
 write_run_meta_json() {
   local path="$1"
   local exit_code="${2:-}"
@@ -278,9 +493,10 @@ write_run_meta_json() {
     "${RUN_META_ISSUE_FALLBACK:-}" \
     "${OUTPUT_DIR:-}" \
     "${RUN_META_RESUMED_FROM:-}" \
+    "${RUN_META_AGENT:-}" \
     "${RUN_META_AUTONOMY_LEVEL:-}" <<'PY'
 import json, sys
-path, loop, target, run_id, started, finished, exit_code, dry_run, require_issue, issue_fallback, output_dir, resumed_from, autonomy = sys.argv[1:14]
+path, loop, target, run_id, started, finished, exit_code, dry_run, require_issue, issue_fallback, output_dir, resumed_from, agent, autonomy = sys.argv[1:15]
 meta = {
     "loop": loop,
     "target_path": target,
@@ -292,6 +508,8 @@ meta = {
     "require_issue": require_issue,
     "issue_fallback": issue_fallback,
 }
+if agent:
+    meta["agent"] = agent
 if resumed_from:
     meta["resumed_from"] = resumed_from
 if autonomy:

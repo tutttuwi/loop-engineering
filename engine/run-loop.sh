@@ -3,7 +3,9 @@
 #
 # ループエンジニアリング基盤のメインエントリポイント。
 # loops/<name>/ に定義されたプロンプト・完了条件を使って、
-# vendor/open-ralph-wiggum の ralph CLI (--agent opencode) をターゲットプロジェクト上で実行する。
+# vendor/open-ralph-wiggum の ralph CLI をターゲットプロジェクト上で実行する。
+# エージェントは --agent / target.yaml agent / loop.yaml agent の順で解決
+# (既定: opencode。claude-code / cursor-agent も第一級)。
 #
 # 使い方:
 #   engine/run-loop.sh --loop monkey-test --target /path/to/target-project
@@ -30,7 +32,7 @@ source "$SCRIPT_DIR/lib/common.sh"
 # shellcheck source=./lib/gate.sh
 source "$SCRIPT_DIR/lib/gate.sh"
 
-RALPH_ENTRY="${ROOT_DIR}/vendor/open-ralph-wiggum/ralph.ts"
+RALPH_ENTRY="${RALPH_ENTRY:-${ROOT_DIR}/vendor/open-ralph-wiggum/ralph.ts}"
 
 usage() {
   cat >&2 <<EOF
@@ -49,7 +51,9 @@ Usage:
   --list-targets           project-config/targets/*.yaml の名前を列挙して終了
   --max-iterations <N>     最大イテレーション数(既定: loop.yamlの値)
   --min-iterations <N>     最小イテレーション数(既定: loop.yamlの値)
-  --model <provider/model> 使用モデル(既定: opencode.jsonのデフォルトモデル = ローカルLLM)
+  --model <provider/model> 使用モデル(既定: エージェント側のデフォルト。OpenCode は opencode.json)
+  --agent <name>           Ralph エージェント (opencode|claude-code|cursor-agent|codex|copilot|qwen-code)
+                           優先: 本フラグ > target.yaml agent > loop.yaml agent
   --issue-tracker <t>      github | gitlab (既定: target.yamlの値)
   --issue-post-mode <m>    create(毎回新規Issue) | update(既存Issueへ追記) (既定: target.yaml)
   --issue-target <id|url>  update時の既存Issue番号またはURL (既定: target.yaml)
@@ -99,6 +103,7 @@ target_registry_name=""
 max_iterations_override=""
 min_iterations_override=""
 model_override=""
+agent_override=""
 issue_tracker_override=""
 issue_post_mode_override=""
 issue_target_override=""
@@ -151,6 +156,7 @@ while [[ $# -gt 0 ]]; do
     --max-iterations) max_iterations_override="$2"; shift 2 ;;
     --min-iterations) min_iterations_override="$2"; shift 2 ;;
     --model) model_override="$2"; shift 2 ;;
+    --agent) agent_override="$2"; shift 2 ;;
     --issue-tracker) issue_tracker_override="$2"; shift 2 ;;
     --issue-post-mode) issue_post_mode_override="$2"; shift 2 ;;
     --issue-target) issue_target_override="$2"; shift 2 ;;
@@ -251,7 +257,7 @@ default_branch="$(yaml_get "$target_yaml" "default_branch" "main")"
 max_iterations="${max_iterations_override:-$(yaml_get "$loop_yaml" "max_iterations" "15")}"
 min_iterations="${min_iterations_override:-$(yaml_get "$loop_yaml" "min_iterations" "1")}"
 completion_promise="$(yaml_get "$loop_yaml" "completion_promise" "COMPLETE")"
-agent="$(yaml_get "$loop_yaml" "agent" "opencode")"
+agent="$(resolve_loop_agent "$agent_override" "$target_yaml" "$loop_yaml")" || exit 1
 require_issue="$(yaml_get "$loop_yaml" "require_issue" "true")"
 seed_files_csv="$(yaml_get "$loop_yaml" "seed_files" "")"
 max_runs_per_day="$(yaml_get "$loop_yaml" "max_runs_per_day" "2")"
@@ -295,6 +301,7 @@ RUN_META_STARTED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date +"%Y-%m
 RUN_META_DRY_RUN="$([[ "$dry_run" -eq 1 ]] && echo true || echo false)"
 RUN_META_REQUIRE_ISSUE="$require_issue"
 RUN_META_ISSUE_FALLBACK="$issue_fallback"
+RUN_META_AGENT="$agent"
 RUN_META_PATH="${output_dir}/run-meta.json"
 export LOOP_NAME="$loop_name"
 export TARGET_PATH="$target_path"
@@ -330,6 +337,7 @@ export OUTPUT_DIR="$output_dir"
 export ENGINE_ROOT="$runtime_root"
 export COMPLETION_PROMISE="$completion_promise"
 export REPORT_TEMPLATE_PATH="$report_template_dst"
+export AGENT="$agent"
 
 export MONKEY_TEST_TARGET_URL="$(yaml_get "$target_yaml" "monkey_test_target_url" "")"
 export MONKEY_TEST_ACCOUNTS="$(yaml_get "$target_yaml" "monkey_test_accounts" "")"
@@ -407,6 +415,7 @@ log_info "ループ            : ${loop_name}"
 log_info "自律度            : ${autonomy_level}"
 log_info "日次実行上限      : ${max_runs_per_day} (0=無制限)"
 log_info "対象プロジェクト  : ${target_path} (${target_name})"
+log_info "エージェント      : ${agent}"
 log_info "Issue投稿先種別   : ${repo_provider}"
 log_info "Issue投稿モード   : ${issue_post_mode}$([[ -n "$issue_target" ]] && echo " (target=${issue_target})" || true)"
 log_info "Issue完了ゲート   : require_issue=${require_issue} fallback=${issue_fallback} skip=${skip_issue_gate}"
@@ -430,6 +439,37 @@ require_cmd bun "https://bun.sh/ からインストールしてください"
   log_error "submoduleが初期化されていない可能性があります: ./setup/bootstrap-submodules.sh を実行してください"
   exit 1
 }
+
+agent_bin=""
+if agent_bin="$(resolve_agent_binary "$agent")"; then
+  log_info "エージェントCLI   : ${agent_bin}"
+  case "$agent" in
+    cursor-agent)
+      export RALPH_CURSOR_AGENT_BINARY="${RALPH_CURSOR_AGENT_BINARY:-$(basename "$agent_bin")}"
+      ;;
+    claude-code)
+      export RALPH_CLAUDE_BINARY="${RALPH_CLAUDE_BINARY:-$(basename "$agent_bin")}"
+      ;;
+    opencode)
+      export RALPH_OPENCODE_BINARY="${RALPH_OPENCODE_BINARY:-$(basename "$agent_bin")}"
+      ;;
+  esac
+else
+  log_error "${agent} の CLI が見つかりません。$(agent_install_hint "$agent")"
+  exit 1
+fi
+
+if [[ "$agent" == "opencode" ]] && [[ ! -f "${target_path}/.opencode/opencode.json" ]]; then
+  log_error "未 init: ${target_path}/.opencode/opencode.json がありません"
+  log_error "  ./setup/init-target-project.sh を実行してください"
+  exit 1
+fi
+if [[ "$agent" == "claude-code" ]] && ! target_agent_initialized "$target_path" "claude-code"; then
+  log_warn "Claude Code 資材が見つかりません。./setup/init-target-project.sh --agent claude-code を推奨"
+fi
+if [[ "$agent" == "cursor-agent" ]] && ! target_agent_initialized "$target_path" "cursor-agent"; then
+  log_warn "Cursor Agent 資材が見つかりません。./setup/init-target-project.sh --agent cursor-agent を推奨"
+fi
 
 ralph_cmd=(bun "$RALPH_ENTRY"
   --prompt-file "$rendered_prompt"

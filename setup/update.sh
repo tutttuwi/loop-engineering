@@ -28,6 +28,8 @@ target_config=""
 target_registry_name=""
 dry_run_loop=""
 loops=()
+agent_cli=""
+init_agents_cli=""
 
 usage() {
   cat >&2 <<'EOF'
@@ -45,6 +47,8 @@ Options:
   --mcp-permission <mode>  ask|allow|deny (init に渡す)
   --mcp-permission-overrides <map>
                            サーバ別上書き。例: github=allow,playwright=deny
+  --agent <name>           実行エージェント既定 (init / doctor / dry-run へ渡す)
+  --agents <csv>           init が書くレイアウト (all または opencode,claude-code,...)
   --dry-run-loop <name>    最後に run-loop --dry-run を実行するループ名
   --list-targets           project-config/targets/*.yaml の名前を列挙して終了
   -h, --help
@@ -80,6 +84,8 @@ while [[ $# -gt 0 ]]; do
       ;;
     --mcp-permission) mcp_permission_cli="$2"; shift 2 ;;
     --mcp-permission-overrides) mcp_permission_overrides_cli="$2"; shift 2 ;;
+    --agent) agent_cli="$2"; shift 2 ;;
+    --agents) init_agents_cli="$2"; shift 2 ;;
     --dry-run-loop) dry_run_loop="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) log_error "不明な引数: $1"; usage; exit 1 ;;
@@ -120,6 +126,8 @@ init_args=()
 [[ -n "$target_registry_name" ]] && init_args+=(--target-name "$target_registry_name")
 [[ -n "$mcp_permission_cli" ]] && init_args+=(--mcp-permission "$mcp_permission_cli")
 [[ -n "$mcp_permission_overrides_cli" ]] && init_args+=(--mcp-permission-overrides "$mcp_permission_overrides_cli")
+[[ -n "$agent_cli" ]] && init_args+=(--agent "$agent_cli")
+[[ -n "$init_agents_cli" ]] && init_args+=(--agents "$init_agents_cli")
 # bash 3.2 + set -u: 空配列の "${arr[@]}" は unbound になるためガード
 if [[ "${#init_args[@]}" -gt 0 ]]; then
   run_step "init-target-project" "${ROOT_DIR}/setup/init-target-project.sh" "${init_args[@]}"
@@ -130,6 +138,7 @@ fi
 doctor_args=()
 [[ -n "$target_config" ]] && doctor_args+=(--target-config "$target_config")
 [[ -n "$target_registry_name" ]] && doctor_args+=(--target-name "$target_registry_name")
+[[ -n "$agent_cli" ]] && doctor_args+=(--agent "$agent_cli")
 if [[ "${#doctor_args[@]}" -gt 0 ]]; then
   run_step "doctor" "${ROOT_DIR}/setup/doctor.sh" "${doctor_args[@]}"
 else
@@ -141,6 +150,7 @@ if [[ -n "$dry_run_loop" ]]; then
   [[ -n "$target" ]] && dry_args+=(--target "$target")
   [[ -n "$target_config" ]] && dry_args+=(--target-config "$target_config")
   [[ -n "$target_registry_name" ]] && dry_args+=(--target-name "$target_registry_name")
+  [[ -n "$agent_cli" ]] && dry_args+=(--agent "$agent_cli")
   run_step "run-loop --dry-run --loop ${dry_run_loop}" \
     "${ROOT_DIR}/engine/run-loop.sh" "${dry_args[@]}"
 fi

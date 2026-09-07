@@ -1,6 +1,6 @@
 # loop-engineering
 
-ローカルLLM（LM Studio 等）と [OpenCode](https://opencode.ai/ja)、[Open Ralph Wiggum](https://github.com/Th0rgal/open-ralph-wiggum)、[ECC (Everything Claude Code)](https://github.com/affaan-m/ECC) を組み合わせて、**同じタスクを反復しながら品質の高い成果物を得る**ループエンジニアリング基盤です。
+ローカルLLM（LM Studio 等）上の [OpenCode](https://opencode.ai/ja)、または [Claude Code](https://docs.anthropic.com/en/docs/claude-code) / [Cursor Agent CLI](https://cursor.com/docs/cli/headless) と、[Open Ralph Wiggum](https://github.com/Th0rgal/open-ralph-wiggum)、[ECC (Everything Claude Code)](https://github.com/affaan-m/ECC) を組み合わせて、**同じタスクを反復しながら品質の高い成果物を得る**ループエンジニアリング基盤です。
 
 このリポジトリを他プロジェクトの隣に置く（または submodule 化する）だけで、同じ枠組みでモンキーテスト・設計監査・セキュリティ監査・依存関係監査・PR/MR レビューなどを回せます。
 
@@ -66,8 +66,8 @@ loop-engineering/
 | 依存初期化 | `./setup/install.sh` | `vendor/*` submodule 取得、診断 |
 | 対象指定 | `cp …/target.yaml.example` → 編集 | `project-config/target.yaml` |
 | ECC抽出 | `./setup/sync-ecc-assets.sh --loop <name> [--loop ...]` / `--all-loops` | `project-config/{agents,skills,rules}/` に必要な分だけコピー（複数指定は和集合） |
-| 対象へ接続 | `./setup/init-target-project.sh` | 対象PJ側に `.opencode/` と `.loop-engineering/` を作成 |
-| （任意）グローバル | `./setup/configure-opencode.sh` | `~/.config/opencode/opencode.json` |
+| 対象へ接続 | `./setup/init-target-project.sh` | 対象PJ側にエージェント設定（`.opencode/` / `.claude/` / `.cursor/`）と `.loop-engineering/` を作成 |
+| （任意）グローバル | `./setup/configure-opencode.sh` | `~/.config/opencode/opencode.json`（OpenCode のみ） |
 | ループ実行 | `./engine/run-loop.sh --loop <name>` | 対象PJの `.loop-engineering/output/...` に成果物 |
 
 初期化後の **対象プロジェクト** 側:
@@ -75,12 +75,17 @@ loop-engineering/
 ```
 my-app/                                 # = target.yaml の target_path
 ├── .gitignore                          # `.loop-engineering/` が自動追記される
-├── .opencode/                          # OpenCode が読む設定（init で生成）
+├── .opencode/                          # OpenCode が読む設定（init --agents に opencode が含まれるとき）
 │   ├── opencode.json                   # LM Studio / MCP / skills / agents / lsp
 │   └── loop-engineering/               # project-config からコピーされた資材
-│       ├── agents/                     # ← project-config/agents
-│       ├── skills/                     # ← project-config/skills
-│       └── rules/                      # ← project-config/rules
+│       ├── agents/
+│       ├── skills/
+│       └── rules/
+├── .claude/                            # Claude Code（init --agent claude-code / --agents all）
+│   ├── CLAUDE.md / skills / agents / rules /
+├── .cursor/                            # Cursor Agent CLI（init --agent cursor-agent / --agents all）
+│   ├── rules/loop-engineering.mdc
+│   └── skills / mcp.json
 ├── .loop-engineering/                  # ランタイム＋成果物（gitignore）
 │   ├── engine/lib/                     # report/video/tts（実行時に基盤から同期）
 │   └── output/
@@ -190,12 +195,14 @@ cp project-config/target.yaml.example project-config/target.yaml
 # → target_path / repo_url / monkey_test_target_url / monkey_test_accounts などを編集
 
 # 4. ECC資材の取り込み + 対象プロジェクトへ接続
-#    ※ ここで <target>/.opencode/opencode.json に LM Studio / MCP が入る
+#    OpenCode なら <target>/.opencode/opencode.json に LM Studio / MCP が入る
+#    Claude Code / Cursor は --agent または target.yaml の agent で切替
 #    併用するループは一度に指定（和集合 sync）。別々に sync すると他ループ分が落ちる
 ./setup/sync-ecc-assets.sh --loop monkey-test --loop yabaiyo --loop pr-review --loop security-audit --loop deps-audit
 # または全バンドル: ./setup/sync-ecc-assets.sh --all-loops
-# target.yaml の target_path を使う( --target で上書きも可 )
 ./setup/init-target-project.sh
+# Claude Code 例: ./setup/init-target-project.sh --agent claude-code
+# 3レイアウトまとめて: ./setup/init-target-project.sh --agents all
 
 # 5. プロンプト確認 → 実行（使いたいループを選ぶ）
 #    target.yaml の target_path があれば --target は省略可
@@ -206,6 +213,10 @@ cp project-config/target.yaml.example project-config/target.yaml
 # --- yabaiyo ---
 ./engine/run-loop.sh --loop yabaiyo --dry-run
 ./engine/run-loop.sh --loop yabaiyo
+# Cursor Agent CLI で回す例:
+# ./engine/run-loop.sh --loop yabaiyo --agent cursor-agent
+# Claude Code で回す例:
+# ./engine/run-loop.sh --loop yabaiyo --agent claude-code
 
 # --- pr-review ---
 # target.yaml の pr_review_target / issue_post_mode も設定すること
@@ -223,9 +234,9 @@ cp project-config/target.yaml.example project-config/target.yaml
 ./engine/run-loop.sh --loop deps-audit
 ```
 
-`./setup/configure-opencode.sh`（`~/.config/opencode/opencode.json` の更新）は **任意ステップ**です。  
-ループ実行は対象プロジェクトの `.opencode/opencode.json` を使うため、`init-target-project.sh` まで完了していればグローバル設定は不要です。  
-マシン全体で OpenCode + LM Studio を使いたいときだけ実行してください。
+`./setup/configure-opencode.sh`（`~/.config/opencode/opencode.json` の更新）は **OpenCode 利用時の任意ステップ**です。  
+OpenCode ループは対象プロジェクトの `.opencode/opencode.json` を使うため、`init-target-project.sh` まで完了していればグローバル設定は不要です。  
+Claude Code / Cursor Agent で回す場合は LM Studio もグローバル OpenCode 設定も不要です。
 
 別ターミナルで進捗確認:
 
@@ -253,6 +264,7 @@ cp project-config/target.yaml.example project-config/target.yaml
 | [LOOP.md](LOOP.md) | この基盤のループ運用（自律度・kill switch） |
 | [docs/LOOPS.md](docs/LOOPS.md) | 同梱ループの説明と新規追加方法 |
 | [docs/features/](docs/features/README.md) | **機能カタログ（要件定義・設計・ロードマップ）** |
+| [docs/features/multi-agent.md](docs/features/multi-agent.md) | OpenCode / Claude Code / Cursor Agent の切替 |
 | [vendor/cobusgreyling-loop-engineering](https://github.com/cobusgreyling/loop-engineering) | パターン参考 submodule |
 
 ## 前提ツール
@@ -260,12 +272,17 @@ cp project-config/target.yaml.example project-config/target.yaml
 | ツール | 必須 | 用途 |
 | --- | --- | --- |
 | [Bun](https://bun.sh/) | ○ | open-ralph-wiggum 実行 |
-| [OpenCode](https://opencode.ai/ja) | ○ | エージェント本体 |
+| [OpenCode](https://opencode.ai/ja) | △ | 既定エージェント（ローカルLLM） |
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | △ | `--agent claude-code`（`claude`） |
+| [Cursor Agent CLI](https://cursor.com/docs/cli/headless) | △ | `--agent cursor-agent`（`agent` / `cursor-agent`） |
 | Node.js / npx | ○ | Marp CLI / Playwright MCP |
 | ffmpeg | ○ | 報告動画生成 |
 | python3, jq, git | ○ | 設定生成・テンプレート展開 |
-| LM Studio 等 | ○ | ローカル LLM（OpenAI互換API） |
+| LM Studio 等 | △ | OpenCode 用ローカル LLM（OpenAI互換API） |
 | gh / glab | 任意 | Issue投稿のCLI代替 |
+
+△: 実行エージェントに応じて必須。3つのエージェント CLI のうち **使うもの** を導入する。
+詳細は [docs/features/multi-agent.md](docs/features/multi-agent.md)。
 
 環境診断は `./setup/doctor.sh` でいつでも実行できます。  
 エンジンの最小回帰は `./tests/smoke.sh`（GitHub Actions: `.github/workflows/smoke.yml`）。  

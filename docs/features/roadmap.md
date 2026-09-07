@@ -1,7 +1,7 @@
 # ロードマップ
 
-調査日: 2026-08-11  
-対象: loop-engineering（OpenCode + Ralph + ECC、ローカル LLM）
+調査日: 2026-09-06  
+対象: loop-engineering（OpenCode + Claude Code + Cursor Agent CLI + Ralph + ECC）
 
 ## 現状サマリ
 
@@ -108,6 +108,11 @@ P0–P4 で骨格は揃ったあとに残っていた、**コード／文書で�
 - 需要のない新規製品ループ（`_template` / `new-loop.sh` で十分）。cobusgreyling の daily-triage 等は [cobusgreyling-reference.md](./cobusgreyling-reference.md) を見て需要ベースで追加
 - ステージ済み script への `LOOP_ENGINEERING_ROOT` 参照の全面再設計（[workspace-boundary.md](./workspace-boundary.md) の既知メモ。今の report/video は `SCRIPT_DIR` 相対で足りる）
 - cobusgreyling の `loop-audit` / `loop-gate` CLI の再実装（ホスト側は [loop-safety.md](./loop-safety.md) で最小強制）
+
+### 追記（2026-09-06）: マルチエージェント
+
+OpenCode 以外に Claude Code / Cursor Agent CLI を第一級として追加（[multi-agent.md](./multi-agent.md)）。  
+据え置きのまま: Codex / Copilot / Qwen Code の専用 init レイアウト（Ralph `--agent` 通過のみ）。
 
 関連: [report-video-pipeline.md](./report-video-pipeline.md)・[target-config.md](./target-config.md)・[issue-posting.md](./issue-posting.md)・[porting-and-update.md](./porting-and-update.md)・[bundled-loops.md](./bundled-loops.md)・[artifact-lifecycle.md](./artifact-lifecycle.md)・[doctor-and-setup.md](./doctor-and-setup.md)・[workspace-boundary.md](./workspace-boundary.md)・[loop-runner.md](./loop-runner.md)
 

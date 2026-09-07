@@ -76,6 +76,34 @@ assert_eq "yaml_get missing default" "$(yaml_get "$yaml_file" "missing" "fallbac
 assert_eq "yaml_get with_comment" "$(yaml_get "$yaml_file" "with_comment" "")" "value"
 assert_eq "yaml_get absent file" "$(yaml_get "${TMP_ROOT}/nope.yaml" "x" "d")" "d"
 
+# --- agent name resolution -------------------------------------------------
+echo ""
+echo "--- agent name resolution ---------------------------------------------"
+assert_eq "normalize opencode" "$(normalize_agent_name opencode)" "opencode"
+assert_eq "normalize local" "$(normalize_agent_name local)" "opencode"
+assert_eq "normalize claude" "$(normalize_agent_name claude)" "claude-code"
+assert_eq "normalize claude-code" "$(normalize_agent_name claude-code)" "claude-code"
+assert_eq "normalize cursor" "$(normalize_agent_name cursor)" "cursor-agent"
+assert_eq "normalize agent" "$(normalize_agent_name agent)" "cursor-agent"
+assert_eq "normalize empty" "$(normalize_agent_name "")" "opencode"
+assert_ok "validate opencode" validate_agent_name opencode
+assert_ok "validate cursor-agent" validate_agent_name cursor-agent
+assert_fail "reject unknown agent" validate_agent_name "nope-agent"
+
+agent_yaml="${TMP_ROOT}/agent-target.yaml"
+cat >"$agent_yaml" <<'EOF'
+agent: cursor-agent
+init_agents: all
+EOF
+assert_eq "resolve yaml agent" "$(resolve_loop_agent "" "$agent_yaml" "")" "cursor-agent"
+assert_eq "cli overrides yaml" "$(resolve_loop_agent claude "$agent_yaml" "")" "claude-code"
+assert_eq "loop.yaml default" "$(resolve_loop_agent "" "" "${ROOT_DIR}/loops/yabaiyo/loop.yaml")" "opencode"
+assert_eq "init_agents all" "$(resolve_init_agents all "" opencode)" "opencode,claude-code,cursor-agent"
+assert_eq "init_agents from yaml" "$(resolve_init_agents "" "$agent_yaml" opencode)" "opencode,claude-code,cursor-agent"
+assert_eq "init_agents fallback run agent" "$(resolve_init_agents "" "${TMP_ROOT}/nope.yaml" claude-code)" "claude-code"
+assert_ok "csv_has opencode" csv_has "opencode,claude-code" opencode
+assert_fail "csv_has missing" csv_has "opencode,claude-code" cursor-agent
+
 # --- render-prompt ---------------------------------------------------------
 echo ""
 echo "--- render-prompt -----------------------------------------------------"
@@ -767,6 +795,10 @@ fi
 # --- multi-loop ECC sync union ---------------------------------------------
 echo ""
 echo "--- multi-loop ECC sync union -----------------------------------------"
+if [[ ! -f "${ROOT_DIR}/vendor/ecc/rules/README.md" ]]; then
+  log_ok "skip ECC sync tests (vendor/ecc not initialized)"
+  pass=$((pass + 1))
+else
 ecc_dest="${TMP_ROOT}/ecc-dest"
 mkdir -p "${ecc_dest}/rules/common"
 # 初回 sync（マニフェスト作成）— monkey-test + security-audit の和集合
@@ -897,6 +929,7 @@ else
   log_error "--all-loops manifest incomplete"
   fail=$((fail + 1))
 fi
+fi # vendor/ecc available
 
 # --- artifact lifecycle: list-runs / clean-runs (P4-2) ---------------------
 echo ""
@@ -1408,11 +1441,22 @@ cat >"${fb_bin}/bun" <<'BUNEOF'
 exit 0
 BUNEOF
 chmod +x "${fb_bin}/bun"
+# run-loop は Ralph 起動前にエージェント CLI を確認する
+cat >"${fb_bin}/opencode" <<'OCEOF'
+#!/usr/bin/env bash
+exit 0
+OCEOF
+chmod +x "${fb_bin}/opencode"
 cp "${issue_bin}/gh" "${fb_bin}/gh"
 chmod +x "${fb_bin}/gh"
 
+# Ralph 本体は bun stub が肩代わりする。submodule 無しの CI でも経路を通す。
+dummy_ralph="${TMP_ROOT}/dummy-ralph.ts"
+printf '// smoke stub\n' >"$dummy_ralph"
+
 set +e
 PATH="${fb_bin}:${PATH}" \
+  RALPH_ENTRY="$dummy_ralph" \
   "${ROOT_DIR}/engine/run-loop.sh" \
     --loop monkey-test \
     --target-config "$fb_yaml" \
@@ -1574,7 +1618,8 @@ meta_run="$(find "${target_dir}/.loop-engineering/output/monkey-test" -name run-
 if [[ -n "$meta_run" ]] \
   && grep -q '"loop": "monkey-test"' "$meta_run" \
   && grep -q '"dry_run": true' "$meta_run" \
-  && grep -q '"exit_code": 0' "$meta_run"; then
+  && grep -q '"exit_code": 0' "$meta_run" \
+  && grep -q '"agent": "opencode"' "$meta_run"; then
   log_ok "dry-run writes run-meta.json (exit_code=0)"
   pass=$((pass + 1))
 else
@@ -1884,8 +1929,17 @@ printf 'pwned-by-ralph\n' > src/app.py
 exit 0
 EOF
 chmod +x "${wt_bin}/bun"
+# run-loop は Ralph 起動前にエージェント CLI を確認する
+cat >"${wt_bin}/opencode" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "${wt_bin}/opencode"
+dummy_ralph="${dummy_ralph:-${TMP_ROOT}/dummy-ralph.ts}"
+printf '// smoke stub\n' >"$dummy_ralph"
 set +e
 PATH="${wt_bin}:${PATH}" \
+  RALPH_ENTRY="$dummy_ralph" \
   "${ROOT_DIR}/engine/run-loop.sh" \
     --loop monkey-test \
     --target-config "$wt_run_yaml" \
@@ -1908,6 +1962,7 @@ fi
 printf 'clean\n' >"${wt_run_target}/src/app.py"
 set +e
 PATH="${wt_bin}:${PATH}" \
+  RALPH_ENTRY="$dummy_ralph" \
   "${ROOT_DIR}/engine/run-loop.sh" \
     --loop monkey-test \
     --target-config "$wt_run_yaml" \
@@ -1989,6 +2044,13 @@ echo "ralph budget-stub"
 exit 0
 EOF
 chmod +x "${budget_bin}/bun"
+cat >"${budget_bin}/opencode" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "${budget_bin}/opencode"
+dummy_ralph="${dummy_ralph:-${TMP_ROOT}/dummy-ralph.ts}"
+printf '// smoke stub\n' >"$dummy_ralph"
 
 set +e
 PATH="${budget_bin}:${PATH}" \
@@ -2031,6 +2093,7 @@ fi
 
 set +e
 PATH="${budget_bin}:${PATH}" \
+  RALPH_ENTRY="$dummy_ralph" \
   "${ROOT_DIR}/engine/run-loop.sh" \
     --loop monkey-test \
     --target-config "$budget_yaml" \
@@ -2046,6 +2109,204 @@ if [[ "$budget_skip_rc" -eq 0 ]]; then
 else
   log_error "--skip-budget-gate still failed (rc=${budget_skip_rc})"
   sed -n '1,40p' "${TMP_ROOT}/budget-skip.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+# --- multi-agent (OpenCode / Claude Code / Cursor Agent) --------------------
+echo ""
+echo "--- multi-agent -------------------------------------------------------"
+
+set +e
+"${ROOT_DIR}/engine/run-loop.sh" \
+  --loop yabaiyo \
+  --target-config "$target_yaml" \
+  --agent nope-agent \
+  --dry-run \
+  >"${TMP_ROOT}/bad-agent.out" 2>"${TMP_ROOT}/bad-agent.err"
+bad_agent_rc=$?
+set -e
+if [[ "$bad_agent_rc" -ne 0 ]] && grep -q '未対応の agent' "${TMP_ROOT}/bad-agent.err"; then
+  log_ok "run-loop rejects unknown --agent"
+  pass=$((pass + 1))
+else
+  log_error "unknown --agent was not rejected (rc=${bad_agent_rc})"
+  sed -n '1,40p' "${TMP_ROOT}/bad-agent.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+set +e
+"${ROOT_DIR}/engine/run-loop.sh" \
+  --loop yabaiyo \
+  --target-config "$target_yaml" \
+  --agent cursor-agent \
+  --dry-run \
+  >"${TMP_ROOT}/cursor-dry.out" 2>"${TMP_ROOT}/cursor-dry.err"
+cursor_dry_rc=$?
+set -e
+cursor_meta="$(find "${target_dir}/.loop-engineering/output/yabaiyo" -name run-meta.json 2>/dev/null | tail -n1)"
+if [[ "$cursor_dry_rc" -eq 0 ]] \
+  && grep -q 'エージェント      : cursor-agent' "${TMP_ROOT}/cursor-dry.err" \
+  && [[ -n "$cursor_meta" ]] \
+  && grep -q '"agent": "cursor-agent"' "$cursor_meta"; then
+  log_ok "dry-run --agent cursor-agent writes run-meta.agent"
+  pass=$((pass + 1))
+else
+  log_error "cursor-agent dry-run failed (rc=${cursor_dry_rc})"
+  sed -n '1,60p' "${TMP_ROOT}/cursor-dry.err" >&2 || true
+  [[ -n "$cursor_meta" ]] && sed -n '1,40p' "$cursor_meta" >&2 || true
+  fail=$((fail + 1))
+fi
+
+pc_tmp="${TMP_ROOT}/fake-project-config"
+mkdir -p "${pc_tmp}/agents" "${pc_tmp}/skills/demo-skill" "${pc_tmp}/rules/common"
+printf 'You are the architect.\n' >"${pc_tmp}/agents/architect.txt"
+cat >"${pc_tmp}/agents/reviewer.md" <<'EOF'
+---
+name: reviewer
+description: review specialist
+---
+Review the diff.
+EOF
+cat >"${pc_tmp}/skills/demo-skill/SKILL.md" <<'EOF'
+---
+name: demo-skill
+description: demo
+---
+Do the demo.
+EOF
+printf '# Common rule\n- no secrets in logs\n' >"${pc_tmp}/rules/common/coding-style.md"
+
+stage_target="${TMP_ROOT}/stage-target"
+mkdir -p "$stage_target"
+LOOP_TARGET="$stage_target" \
+LOOP_PROJECT_CONFIG="$pc_tmp" \
+LOOP_INIT_AGENTS="claude-code,cursor-agent" \
+LOOP_ENABLE_GITHUB=1 \
+LOOP_ENABLE_GITLAB=0 \
+LOOP_ENABLE_PLAYWRIGHT=1 \
+LOOP_ENABLE_SERENA=0 \
+LOOP_MCP_PERMISSION=allow \
+  python3 "${ROOT_DIR}/setup/lib/stage_agent_assets.py" \
+  >"${TMP_ROOT}/stage.out" 2>"${TMP_ROOT}/stage.err" || true
+
+if [[ -f "${stage_target}/.claude/CLAUDE.md" ]] \
+  && [[ -f "${stage_target}/.claude/agents/architect.md" ]] \
+  && [[ -f "${stage_target}/.claude/agents/reviewer.md" ]] \
+  && [[ -f "${stage_target}/.claude/skills/demo-skill/SKILL.md" ]] \
+  && [[ -f "${stage_target}/.claude/rules/loop-engineering.md" ]] \
+  && [[ -f "${stage_target}/.claude/settings.json" ]] \
+  && [[ -f "${stage_target}/.mcp.json" ]] \
+  && [[ -f "${stage_target}/.cursor/rules/loop-engineering.mdc" ]] \
+  && [[ -f "${stage_target}/.cursor/skills/demo-skill/SKILL.md" ]] \
+  && [[ -f "${stage_target}/.cursor/mcp.json" ]] \
+  && grep -q 'name: architect' "${stage_target}/.claude/agents/architect.md" \
+  && grep -q 'bypassPermissions' "${stage_target}/.claude/settings.json" \
+  && grep -q 'playwright' "${stage_target}/.mcp.json" \
+  && grep -Fq '${GITHUB_TOKEN}' "${stage_target}/.mcp.json"; then
+  log_ok "stage_agent_assets writes Claude + Cursor layouts + MCP"
+  pass=$((pass + 1))
+else
+  log_error "stage_agent_assets incomplete"
+  sed -n '1,40p' "${TMP_ROOT}/stage.err" >&2 || true
+  find "$stage_target" -type f 2>/dev/null | sed -n '1,40p' >&2 || true
+  fail=$((fail + 1))
+fi
+
+claude_init_target="${TMP_ROOT}/claude-init-target"
+mkdir -p "$claude_init_target"
+claude_yaml="${TMP_ROOT}/claude-init.yaml"
+cat >"$claude_yaml" <<EOF
+target_path: ${claude_init_target}
+target_name: claude-init
+repo_provider: github
+repo_url: https://github.com/example/claude-init
+default_branch: main
+issue_post_mode: create
+mcp_permission: allow
+agent: claude-code
+EOF
+set +e
+PATH="${upd_stub}:${PATH}" \
+  "${ROOT_DIR}/setup/init-target-project.sh" \
+    --target-config "$claude_yaml" \
+    --agent claude-code \
+    --no-write-target-yaml \
+  >"${TMP_ROOT}/claude-init.out" 2>"${TMP_ROOT}/claude-init.err"
+claude_init_rc=$?
+set -e
+if [[ "$claude_init_rc" -eq 0 ]] \
+  && [[ ! -f "${claude_init_target}/.opencode/opencode.json" ]] \
+  && [[ -f "${claude_init_target}/.claude/CLAUDE.md" ]]; then
+  log_ok "init --agent claude-code skips opencode.json"
+  pass=$((pass + 1))
+else
+  log_error "init --agent claude-code failed (rc=${claude_init_rc})"
+  sed -n '1,80p' "${TMP_ROOT}/claude-init.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+all_init_target="${TMP_ROOT}/all-init-target"
+mkdir -p "$all_init_target"
+all_yaml="${TMP_ROOT}/all-init.yaml"
+cat >"$all_yaml" <<EOF
+target_path: ${all_init_target}
+target_name: all-init
+repo_provider: github
+repo_url: https://github.com/example/all-init
+default_branch: main
+issue_post_mode: create
+mcp_permission: allow
+EOF
+set +e
+PATH="${upd_stub}:${PATH}" \
+  "${ROOT_DIR}/setup/init-target-project.sh" \
+    --target-config "$all_yaml" \
+    --agents all \
+    --no-write-target-yaml \
+  >"${TMP_ROOT}/all-init.out" 2>"${TMP_ROOT}/all-init.err"
+all_init_rc=$?
+set -e
+if [[ "$all_init_rc" -eq 0 ]] \
+  && [[ -f "${all_init_target}/.opencode/opencode.json" ]] \
+  && [[ -f "${all_init_target}/.claude/CLAUDE.md" ]] \
+  && [[ -f "${all_init_target}/.cursor/rules/loop-engineering.mdc" ]]; then
+  log_ok "init --agents all writes three layouts"
+  pass=$((pass + 1))
+else
+  log_error "init --agents all failed (rc=${all_init_rc})"
+  sed -n '1,100p' "${TMP_ROOT}/all-init.err" >&2 || true
+  fail=$((fail + 1))
+fi
+
+claude_uninit="${TMP_ROOT}/claude-uninit"
+mkdir -p "$claude_uninit"
+printf '#!/usr/bin/env bash\nexit 0\n' >"${upd_stub}/claude"
+chmod +x "${upd_stub}/claude"
+claude_uninit_yaml="${TMP_ROOT}/claude-uninit.yaml"
+cat >"$claude_uninit_yaml" <<EOF
+target_path: ${claude_uninit}
+target_name: claude-uninit
+repo_provider: github
+repo_url: https://github.com/example/claude-uninit
+default_branch: main
+issue_post_mode: create
+agent: claude-code
+EOF
+set +e
+PATH="${upd_stub}:${PATH}" \
+  "${ROOT_DIR}/setup/doctor.sh" \
+    --target-config "$claude_uninit_yaml" \
+    --agent claude-code \
+  >"${TMP_ROOT}/doc-claude-uninit.out" 2>"${TMP_ROOT}/doc-claude-uninit.err"
+doc_claude_uninit_rc=$?
+set -e
+if [[ "$doc_claude_uninit_rc" -ne 0 ]] \
+  && grep -qE '未 init: .*\.claude/' "${TMP_ROOT}/doc-claude-uninit.err"; then
+  log_ok "doctor ERROR when claude-code target not initialized"
+  pass=$((pass + 1))
+else
+  log_error "doctor claude-code uninit failed (rc=${doc_claude_uninit_rc})"
+  sed -n '1,80p' "${TMP_ROOT}/doc-claude-uninit.err" >&2 || true
   fail=$((fail + 1))
 fi
 
